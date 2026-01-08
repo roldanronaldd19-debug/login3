@@ -7,59 +7,68 @@ export default function AccountManagement() {
   const [email, setEmail] = useState('')
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
-  const [invitationLink, setInvitationLink] = useState('')
 
   const handleSendInvitation = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setMessage(null)
-    setInvitationLink('')
 
     try {
-      // Crear un enlace de registro personalizado
-      const registrationLink = `https://login3-three.vercel.app/register?invite=${btoa(email)}&email=${encodeURIComponent(email)}`
-      
-      // Aquí normalmente enviarías el email con el enlace
-      // Para este ejemplo, solo mostramos el enlace
-      
-      setInvitationLink(registrationLink)
+      // Usar Supabase para enviar invitación por email
+      const { error } = await supabase.auth.admin.inviteUserByEmail(email, {
+        redirectTo: 'https://login3-three.vercel.app/register'
+      })
+
+      if (error) {
+        // Si falla la invitación admin (puede ser por permisos), usar signUp como alternativa
+        console.log('Intentando método alternativo...')
+        
+        // Método alternativo: crear usuario pendiente
+        const { error: signUpError } = await supabase.auth.signUp({
+          email,
+          password: Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-8), // Contraseña temporal
+          options: {
+            emailRedirectTo: 'https://login3-three.vercel.app/register',
+            data: {
+              invited: true,
+              invitation_date: new Date().toISOString()
+            }
+          }
+        })
+        
+        if (signUpError) throw signUpError
+      }
+
       setMessage({ 
         type: 'success', 
-        text: `Invitación creada para ${email}. Copia el enlace y envíalo al usuario.` 
+        text: `✅ Invitación enviada exitosamente a ${email}. El usuario recibirá un email con el enlace de registro.` 
       })
       
-      // Opcional: Podrías guardar la invitación en tu base de datos
-      // const { error } = await supabase.from('invitations').insert({
-      //   email: email,
-      //   invitation_link: registrationLink,
-      //   created_at: new Date().toISOString()
-      // })
-
       setEmail('')
       
     } catch (error: any) {
-      setMessage({ type: 'error', text: error.message })
+      console.error('Error completo:', error)
+      
+      // Mensajes de error más específicos
+      let errorMessage = error.message
+      if (error.message.includes('User already registered')) {
+        errorMessage = 'Este usuario ya está registrado en el sistema.'
+      } else if (error.message.includes('rate limit')) {
+        errorMessage = 'Límite de envíos alcanzado. Por favor, intenta más tarde.'
+      }
+      
+      setMessage({ type: 'error', text: `❌ Error: ${errorMessage}` })
     } finally {
       setLoading(false)
     }
   }
 
-  const copyToClipboard = () => {
-    navigator.clipboard.writeText(invitationLink)
-      .then(() => {
-        alert('Enlace copiado al portapapeles')
-      })
-      .catch(err => {
-        console.error('Error al copiar:', err)
-      })
-  }
-
   return (
     <div className="space-y-4">
       <div>
-        <h4 className="text-lg font-medium mb-2">Enviar Invitación</h4>
+        <h4 className="text-lg font-medium mb-2">Enviar Invitación por Email</h4>
         <p className="text-sm text-gray-600 mb-4">
-          Ingresa el email del usuario que deseas invitar al sistema.
+          Ingresa el email del usuario que deseas invitar. Recibirá un email con el enlace de registro.
         </p>
       </div>
 
@@ -80,49 +89,46 @@ export default function AccountManagement() {
             placeholder="usuario@ejemplo.com"
             required
           />
+          <p className="text-xs text-gray-500 mt-1">
+            El usuario recibirá un email de invitación directamente
+          </p>
         </div>
 
         <button
           type="submit"
           disabled={loading}
-          className="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700 disabled:opacity-50"
+          className="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center"
         >
-          {loading ? 'Enviando...' : 'Enviar Invitación'}
+          {loading ? (
+            <>
+              <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              Enviando invitación...
+            </>
+          ) : (
+            '📧 Enviar Invitación por Email'
+          )}
         </button>
       </form>
 
-      {invitationLink && (
-        <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-          <h5 className="font-medium mb-2">Enlace de invitación:</h5>
-          <div className="flex items-center space-x-2">
-            <input
-              type="text"
-              value={invitationLink}
-              readOnly
-              className="flex-1 p-2 border rounded text-sm"
-            />
-            <button
-              onClick={copyToClipboard}
-              className="bg-gray-200 hover:bg-gray-300 px-3 py-2 rounded text-sm"
-            >
-              Copiar
-            </button>
-          </div>
-          <p className="text-xs text-gray-500 mt-2">
-            Comparte este enlace con el usuario para que pueda registrarse.
+      <div className="border-t pt-4">
+        <h5 className="font-medium mb-2">📋 Proceso de invitación:</h5>
+        <ol className="text-sm text-gray-600 space-y-1 list-decimal list-inside">
+          <li>Ingresa el email del usuario</li>
+          <li>Haz clic en "Enviar Invitación por Email"</li>
+          <li>Supabase enviará automáticamente un email de invitación</li>
+          <li>El usuario hace clic en el enlace del email</li>
+          <li>Completa su registro en la página</li>
+          <li>¡Listo! Puede iniciar sesión</li>
+        </ol>
+        
+        <div className="mt-4 p-3 bg-blue-50 rounded">
+          <p className="text-sm text-blue-800">
+            <strong>Nota:</strong> El usuario debe usar el mismo email al que se envió la invitación.
           </p>
         </div>
-      )}
-
-      <div className="border-t pt-4">
-        <h5 className="font-medium mb-2">Instrucciones:</h5>
-        <ul className="text-sm text-gray-600 space-y-1">
-          <li>1. Ingresa el email del usuario a invitar</li>
-          <li>2. Haz clic en "Enviar Invitación"</li>
-          <li>3. Copia el enlace generado</li>
-          <li>4. Envía el enlace al usuario por email o mensaje</li>
-          <li>5. El usuario hará clic en el enlace para registrarse</li>
-        </ul>
       </div>
     </div>
   )
