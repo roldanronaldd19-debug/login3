@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { supabase } from '@/lib/supabase'
+import { supabase } from '../../lib/supabase'
 import { useRouter } from 'next/navigation'
 
 export default function ResetPasswordPage() {
@@ -9,16 +9,27 @@ export default function ResetPasswordPage() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
+  const [session, setSession] = useState<any>(null)
   const router = useRouter()
 
   useEffect(() => {
-    // Verificar que el usuario tenga una sesión válida para resetear la contraseña
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    // Verificar si hay una sesión activa (necesaria para resetear contraseña)
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      
       if (!session) {
-        router.push('/auth/login')
+        // Si no hay sesión, podría ser que el usuario llegó sin el token
+        setMessage({ 
+          type: 'error', 
+          text: 'Enlace inválido o expirado. Por favor solicita un nuevo enlace de recuperación.' 
+        })
+      } else {
+        setSession(session)
       }
-    })
-  }, [router])
+    }
+
+    checkSession()
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -46,12 +57,14 @@ export default function ResetPasswordPage() {
 
       setMessage({ 
         type: 'success', 
-        text: 'Contraseña actualizada exitosamente. Redirigiendo...' 
+        text: '¡Contraseña actualizada exitosamente!' 
       })
       
+      // Redirigir al dashboard después de 2 segundos
       setTimeout(() => {
         router.push('/dashboard')
       }, 2000)
+      
     } catch (error: any) {
       setMessage({ type: 'error', text: error.message })
     } finally {
@@ -69,47 +82,68 @@ export default function ResetPasswordPage() {
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {message && (
-            <div className={`p-3 rounded ${message.type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-              {message.text}
+        {!session ? (
+          <div className="text-center">
+            <div className="text-red-600 mb-4">
+              No tienes permiso para restablecer la contraseña.
             </div>
-          )}
-
-          <div>
-            <label className="block text-sm font-medium mb-1">Nueva Contraseña</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full p-2 border rounded"
-              placeholder="••••••••"
-              required
-              minLength={6}
-            />
+            <a 
+              href="/forgot-password" 
+              className="text-blue-600 hover:text-blue-800"
+            >
+              Solicitar nuevo enlace
+            </a>
           </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {message && (
+              <div className={`p-3 rounded ${message.type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                {message.text}
+              </div>
+            )}
 
-          <div>
-            <label className="block text-sm font-medium mb-1">Confirmar Contraseña</label>
-            <input
-              type="password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              className="w-full p-2 border rounded"
-              placeholder="••••••••"
-              required
-              minLength={6}
-            />
-          </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Nueva Contraseña</label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full p-2 border rounded"
+                placeholder="••••••••"
+                required
+                minLength={6}
+              />
+              <p className="text-sm text-gray-500 mt-1">Mínimo 6 caracteres</p>
+            </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700 disabled:opacity-50"
-          >
-            {loading ? 'Actualizando...' : 'Actualizar Contraseña'}
-          </button>
-        </form>
+            <div>
+              <label className="block text-sm font-medium mb-1">Confirmar Contraseña</label>
+              <input
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className="w-full p-2 border rounded"
+                placeholder="••••••••"
+                required
+                minLength={6}
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700 disabled:opacity-50"
+            >
+              {loading ? 'Actualizando...' : 'Actualizar Contraseña'}
+            </button>
+
+            <div className="text-center text-sm">
+              <a href="/login" className="text-blue-600 hover:text-blue-800">
+                Volver al inicio de sesión
+              </a>
+            </div>
+          </form>
+        )}
       </div>
     </div>
   )
