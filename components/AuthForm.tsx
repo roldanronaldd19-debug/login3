@@ -93,29 +93,29 @@ export default function AuthForm({ mode }: AuthFormProps) {
       </div>
 
       {mode === 'login' && (
-        <div>
-          <label className="block text-sm font-medium mb-1">Contraseña</label>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full p-2 border rounded"
-            placeholder="••••••••"
-            required
-            minLength={6}
-          />
-        </div>
-      )}
+        <>
+          <div>
+            <label className="block text-sm font-medium mb-1">Contraseña</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full p-2 border rounded"
+              placeholder="••••••••"
+              required
+              minLength={6}
+            />
+          </div>
 
-      {mode === 'login' && (
-        <div className="text-right">
-          <a 
-            href="/forgot-password" 
-            className="text-sm text-blue-600 hover:text-blue-800"
-          >
-            ¿Olvidaste tu contraseña?
-          </a>
-        </div>
+          <div className="text-right">
+            <a 
+              href="/forgot-password" 
+              className="text-sm text-blue-600 hover:text-blue-800"
+            >
+              ¿Olvidaste tu contraseña?
+            </a>
+          </div>
+        </>
       )}
 
       <button
@@ -127,14 +127,6 @@ export default function AuthForm({ mode }: AuthFormProps) {
           mode === 'login' ? 'Iniciar Sesión' :
           'Enviar enlace de recuperación'}
       </button>
-
-      {mode === 'forgot-password' && (
-        <div className="text-center text-sm">
-          <a href="/login" className="text-blue-600 hover:text-blue-800">
-            Volver al inicio de sesión
-          </a>
-        </div>
-      )}
     </form>
   )
 }
