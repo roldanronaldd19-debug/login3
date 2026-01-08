@@ -1,16 +1,16 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useRouter, useSearchParams } from 'next/navigation'
 
-export default function RegisterPage() {
+function RegisterContent() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
-  const [isValidInvitation, setIsValidInvitation] = useState(false)
+  const [isValidInvitation, setIsValidInvitation] = useState<boolean | null>(null)
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -18,18 +18,15 @@ export default function RegisterPage() {
     // Verificar si hay un token en la URL (invitación)
     const token = searchParams.get('token') || window.location.hash
     
-    if (token) {
+    if (token && token.length > 0) {
       // El usuario llegó a través de una invitación
       setIsValidInvitation(true)
-      
-      // Intentar obtener el email del token
-      // En un caso real, aquí verificarías el token con tu backend
-      // Por ahora, mostramos un formulario genérico
     } else {
       setMessage({ 
         type: 'error', 
         text: 'Enlace de invitación inválido o expirado. Contacta al administrador.' 
       })
+      setIsValidInvitation(false)
     }
   }, [searchParams])
 
@@ -51,47 +48,45 @@ export default function RegisterPage() {
     }
 
     try {
-      // Intentar completar el registro
-      const { error } = await supabase.auth.updateUser({
-        password: password
+      // Intentar crear cuenta nueva
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: 'https://login3-three.vercel.app/dashboard'
+        }
       })
 
-      if (error) {
-        // Si falla, intentar crear cuenta nueva
-        const { error: signUpError } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            emailRedirectTo: 'https://login3-three.vercel.app/dashboard'
-          }
-        })
-
-        if (signUpError) throw signUpError
-        
-        setMessage({ 
-          type: 'success', 
-          text: '¡Registro completado! Serás redirigido al login.' 
-        })
-        
-        setTimeout(() => {
-          router.push('/login')
-        }, 3000)
-      } else {
-        setMessage({ 
-          type: 'success', 
-          text: '¡Contraseña establecida exitosamente! Serás redirigido al dashboard.' 
-        })
-        
-        setTimeout(() => {
-          router.push('/dashboard')
-        }, 2000)
-      }
+      if (error) throw error
+      
+      setMessage({ 
+        type: 'success', 
+        text: '¡Registro completado! Revisa tu email para confirmar tu cuenta.' 
+      })
+      
+      setTimeout(() => {
+        router.push('/login')
+      }, 3000)
       
     } catch (error: any) {
       setMessage({ type: 'error', text: error.message })
     } finally {
       setLoading(false)
     }
+  }
+
+  if (isValidInvitation === null) {
+    // Estado de carga mientras verifica la invitación
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="max-w-md w-full space-y-8 p-8 bg-white rounded-lg shadow">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+            <p className="mt-4 text-gray-600">Verificando invitación...</p>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   if (!isValidInvitation) {
@@ -182,5 +177,20 @@ export default function RegisterPage() {
         </form>
       </div>
     </div>
+  )
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Cargando...</p>
+        </div>
+      </div>
+    }>
+      <RegisterContent />
+    </Suspense>
   )
 }
