@@ -1,62 +1,24 @@
 'use client'
 
 import { useState } from 'react'
-import { useForm } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
-import * as z from 'zod'
 import { supabase } from '../lib/supabase'
-
-// Schemas separados
-const loginSchema = z.object({
-  email: z.string().email('Email inválido'),
-  password: z.string().min(6, 'La contraseña debe tener al menos 6 caracteres')
-})
-
-const registerSchema = loginSchema.extend({
-  confirmPassword: z.string()
-}).refine((data) => data.password === data.confirmPassword, {
-  message: "Las contraseñas no coinciden",
-  path: ["confirmPassword"]
-})
-
-const forgotPasswordSchema = z.object({
-  email: z.string().email('Email inválido')
-})
-
-// Tipos explícitos
-type LoginFormData = z.infer<typeof loginSchema>
-type RegisterFormData = z.infer<typeof registerSchema>
-type ForgotPasswordFormData = z.infer<typeof forgotPasswordSchema>
-
-type AuthFormData = LoginFormData | RegisterFormData | ForgotPasswordFormData
+import { useRouter } from 'next/navigation'
 
 interface AuthFormProps {
   mode: 'login' | 'register' | 'forgot-password'
 }
 
 export default function AuthForm({ mode }: AuthFormProps) {
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
   const [emailSent, setEmailSent] = useState(false)
+  const router = useRouter()
 
-  const getSchema = () => {
-    switch (mode) {
-      case 'login': return loginSchema
-      case 'register': return registerSchema
-      case 'forgot-password': return forgotPasswordSchema
-    }
-  }
-
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-    reset
-  } = useForm<AuthFormData>({
-    resolver: zodResolver(getSchema())
-  })
-
-  const onSubmit = async (data: any) => {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
     setLoading(true)
     setMessage(null)
 
@@ -64,31 +26,38 @@ export default function AuthForm({ mode }: AuthFormProps) {
       switch (mode) {
         case 'login':
           const { error: loginError } = await supabase.auth.signInWithPassword({
-            email: data.email,
-            password: data.password
+            email,
+            password
           })
           
           if (loginError) throw loginError
           setMessage({ type: 'success', text: 'Inicio de sesión exitoso' })
-          window.location.href = '/dashboard'
+          // Redirigir al dashboard usando router
+          router.push('/dashboard')
           break
 
         case 'register':
+          if (password !== confirmPassword) {
+            throw new Error('Las contraseñas no coinciden')
+          }
+          
           const { error: registerError } = await supabase.auth.signUp({
-            email: data.email,
-            password: data.password,
+            email,
+            password,
             options: {
-              emailRedirectTo: `${window.location.origin}/auth/callback`
+              emailRedirectTo: `${window.location.origin}/api/auth/callback`
             }
           })
           
           if (registerError) throw registerError
           setMessage({ type: 'success', text: 'Registro exitoso. Por favor verifica tu email.' })
-          reset()
+          setEmail('')
+          setPassword('')
+          setConfirmPassword('')
           break
 
         case 'forgot-password':
-          const { error: resetError } = await supabase.auth.resetPasswordForEmail(data.email, {
+          const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
             redirectTo: `${window.location.origin}/reset-password`
           })
           
@@ -113,7 +82,10 @@ export default function AuthForm({ mode }: AuthFormProps) {
         <h2 className="text-2xl font-bold mb-4">Revisa tu email</h2>
         <p className="mb-4">Hemos enviado un enlace para restablecer tu contraseña.</p>
         <button
-          onClick={() => setEmailSent(false)}
+          onClick={() => {
+            setEmailSent(false)
+            setEmail('')
+          }}
           className="text-blue-600 hover:text-blue-800"
         >
           ¿No lo recibiste? Intentar de nuevo
@@ -123,7 +95,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
   }
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+    <form onSubmit={handleSubmit} className="space-y-4">
       {message && (
         <div className={`p-3 rounded ${message.type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
           {message.text}
@@ -133,28 +105,27 @@ export default function AuthForm({ mode }: AuthFormProps) {
       <div>
         <label className="block text-sm font-medium mb-1">Email</label>
         <input
-          {...register('email')}
           type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
           className="w-full p-2 border rounded"
           placeholder="tu@email.com"
+          required
         />
-        {(errors as any).email && (
-          <p className="text-red-500 text-sm mt-1">{(errors as any).email.message}</p>
-        )}
       </div>
 
       {(mode === 'login' || mode === 'register') && (
         <div>
           <label className="block text-sm font-medium mb-1">Contraseña</label>
           <input
-            {...register('password')}
             type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
             className="w-full p-2 border rounded"
             placeholder="••••••••"
+            required
+            minLength={6}
           />
-          {(errors as any).password && (
-            <p className="text-red-500 text-sm mt-1">{(errors as any).password.message}</p>
-          )}
         </div>
       )}
 
@@ -162,14 +133,14 @@ export default function AuthForm({ mode }: AuthFormProps) {
         <div>
           <label className="block text-sm font-medium mb-1">Confirmar Contraseña</label>
           <input
-            {...register('confirmPassword')}
             type="password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
             className="w-full p-2 border rounded"
             placeholder="••••••••"
+            required
+            minLength={6}
           />
-          {(errors as any).confirmPassword && (
-            <p className="text-red-500 text-sm mt-1">{(errors as any).confirmPassword.message}</p>
-          )}
         </div>
       )}
 
