@@ -7,10 +7,18 @@ export default function LoginPage() {
         <div>
           <h2 className="text-3xl font-bold text-center">Iniciar Sesión</h2>
           <p className="mt-2 text-center text-gray-600">
-            Acceso solo por invitación
+            Accede a tu cuenta administrativa
+          </p>
+          <p className="mt-1 text-center text-sm text-gray-500">
+            El registro está disponible solo por invitación
           </p>
         </div>
         <AuthForm mode="login" />
+        
+        {/* Quitamos el link a registro */}
+        <div className="text-center text-sm text-gray-500">
+          <p>¿No tienes acceso? Contacta al administrador</p>
+        </div>
       </div>
     </div>
   )
