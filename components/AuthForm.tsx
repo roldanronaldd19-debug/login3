@@ -22,30 +22,27 @@ export default function AuthForm({ mode }: AuthFormProps) {
     setMessage(null)
 
     try {
-      switch (mode) {
-        case 'login':
-          const { error: loginError } = await supabase.auth.signInWithPassword({
-            email,
-            password
-          })
-          
-          if (loginError) throw loginError
-          setMessage({ type: 'success', text: 'Inicio de sesión exitoso' })
-          router.push('/dashboard')
-          break
-
-        case 'forgot-password':
-          const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
-            redirectTo: 'https://login3-three.vercel.app/reset-password'
-          })
-          
-          if (resetError) throw resetError
-          setEmailSent(true)
-          setMessage({ 
-            type: 'success', 
-            text: 'Se ha enviado un enlace de recuperación a tu email. Revisa tu bandeja de entrada.' 
-          })
-          break
+      if (mode === 'login') {
+        const { error: loginError } = await supabase.auth.signInWithPassword({
+          email,
+          password
+        })
+        
+        if (loginError) throw loginError
+        setMessage({ type: 'success', text: 'Inicio de sesión exitoso' })
+        router.push('/dashboard')
+      } 
+      else if (mode === 'forgot-password') {
+        const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: 'https://login3-three.vercel.app/reset-password'
+        })
+        
+        if (resetError) throw resetError
+        setEmailSent(true)
+        setMessage({ 
+          type: 'success', 
+          text: 'Se ha enviado un enlace de recuperación a tu email.' 
+        })
       }
     } catch (error: any) {
       setMessage({ type: 'error', text: error.message })
@@ -124,8 +121,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
         className="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700 disabled:opacity-50"
       >
         {loading ? 'Cargando...' : 
-          mode === 'login' ? 'Iniciar Sesión' :
-          'Enviar enlace de recuperación'}
+          mode === 'login' ? 'Iniciar Sesión' : 'Enviar enlace de recuperación'}
       </button>
 
       {mode === 'forgot-password' && (
