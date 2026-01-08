@@ -1,17 +1,16 @@
 'use client'
 
-import { useState, ReactNode } from 'react'
+import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useRouter } from 'next/navigation'
 
 interface AuthFormProps {
-  mode: 'login' | 'register' | 'forgot-password'
+  mode: 'login' | 'forgot-password'
 }
 
-export default function AuthForm({ mode }: AuthFormProps): ReactNode {
+export default function AuthForm({ mode }: AuthFormProps) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
   const [emailSent, setEmailSent] = useState(false)
@@ -33,26 +32,6 @@ export default function AuthForm({ mode }: AuthFormProps): ReactNode {
           if (loginError) throw loginError
           setMessage({ type: 'success', text: 'Inicio de sesión exitoso' })
           router.push('/dashboard')
-          break
-
-        case 'register':
-          if (password !== confirmPassword) {
-            throw new Error('Las contraseñas no coinciden')
-          }
-          
-          const { error: registerError } = await supabase.auth.signUp({
-            email,
-            password,
-            options: {
-              emailRedirectTo: 'https://login3-three.vercel.app/auth/callback'
-            }
-          })
-          
-          if (registerError) throw registerError
-          setMessage({ type: 'success', text: 'Registro exitoso. Por favor verifica tu email.' })
-          setEmail('')
-          setPassword('')
-          setConfirmPassword('')
           break
 
         case 'forgot-password':
@@ -113,28 +92,13 @@ export default function AuthForm({ mode }: AuthFormProps): ReactNode {
         />
       </div>
 
-      {(mode === 'login' || mode === 'register') && (
+      {mode === 'login' && (
         <div>
           <label className="block text-sm font-medium mb-1">Contraseña</label>
           <input
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full p-2 border rounded"
-            placeholder="••••••••"
-            required
-            minLength={6}
-          />
-        </div>
-      )}
-
-      {mode === 'register' && (
-        <div>
-          <label className="block text-sm font-medium mb-1">Confirmar Contraseña</label>
-          <input
-            type="password"
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
             className="w-full p-2 border rounded"
             placeholder="••••••••"
             required
@@ -161,33 +125,16 @@ export default function AuthForm({ mode }: AuthFormProps): ReactNode {
       >
         {loading ? 'Cargando...' : 
           mode === 'login' ? 'Iniciar Sesión' :
-          mode === 'register' ? 'Registrarse' :
           'Enviar enlace de recuperación'}
       </button>
 
-      <div className="text-center text-sm">
-        {mode === 'login' ? (
-          <p>
-            ¿No tienes cuenta?{' '}
-            <a href="/register" className="text-blue-600 hover:text-blue-800">
-              Regístrate
-            </a>
-          </p>
-        ) : mode === 'register' ? (
-          <p>
-            ¿Ya tienes cuenta?{' '}
-            <a href="/login" className="text-blue-600 hover:text-blue-800">
-              Inicia sesión
-            </a>
-          </p>
-        ) : (
-          <p>
-            <a href="/login" className="text-blue-600 hover:text-blue-800">
-              Volver al inicio de sesión
-            </a>
-          </p>
-        )}
-      </div>
+      {mode === 'forgot-password' && (
+        <div className="text-center text-sm">
+          <a href="/login" className="text-blue-600 hover:text-blue-800">
+            Volver al inicio de sesión
+          </a>
+        </div>
+      )}
     </form>
   )
 }
