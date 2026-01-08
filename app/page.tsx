@@ -11,13 +11,13 @@ export default function HomePage() {
             </div>
             <div className="flex items-center space-x-4">
               <Link 
-                href="/auth/login" 
+                href="/login" 
                 className="text-gray-700 hover:text-gray-900 px-3 py-2 rounded-md"
               >
                 Iniciar Sesión
               </Link>
               <Link 
-                href="/auth/register" 
+                href="/register" 
                 className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
               >
                 Registrarse
@@ -37,7 +37,7 @@ export default function HomePage() {
           </p>
           <div className="mt-10 flex justify-center gap-4">
             <Link
-              href="/auth/login"
+              href="/login"
               className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700"
             >
               Comenzar
