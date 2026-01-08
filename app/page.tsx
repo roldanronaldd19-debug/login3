@@ -1,6 +1,10 @@
-import Link from 'next/link'
+'use client'
+
+import { useRouter } from 'next/navigation'
 
 export default function HomePage() {
+  const router = useRouter()
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
       <nav className="bg-white shadow-sm">
@@ -9,19 +13,13 @@ export default function HomePage() {
             <div className="flex items-center">
               <h1 className="text-xl font-bold text-gray-900">MiApp</h1>
             </div>
-            <div className="flex items-center space-x-4">
-              <Link 
-                href="/login" 
+            <div className="flex items-center">
+              <button 
+                onClick={() => router.push('/login')}
                 className="text-gray-700 hover:text-gray-900 px-3 py-2 rounded-md"
               >
                 Iniciar Sesión
-              </Link>
-              <Link 
-                href="/register" 
-                className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
-              >
-                Registrarse
-              </Link>
+              </button>
             </div>
           </div>
         </div>
@@ -33,23 +31,15 @@ export default function HomePage() {
             Sistema de Autenticación
           </h1>
           <p className="mt-3 max-w-md mx-auto text-base text-gray-500 sm:text-lg md:mt-5 md:text-xl md:max-w-3xl">
-            Implementación completa con Supabase, Vercel y GitHub. Incluye login, registro y recuperación de contraseña.
+            Sistema privado de autenticación. Solo usuarios autorizados pueden acceder.
           </p>
-          <div className="mt-10 flex justify-center gap-4">
-            <Link
-              href="/login"
+          <div className="mt-10">
+            <button
+              onClick={() => router.push('/login')}
               className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700"
             >
-              Comenzar
-            </Link>
-            <a
-              href="https://github.com/tuusuario/turepo"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center px-6 py-3 border border-gray-300 text-base font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
-            >
-              Ver en GitHub
-            </a>
+              Iniciar Sesión
+            </button>
           </div>
         </div>
       </main>
