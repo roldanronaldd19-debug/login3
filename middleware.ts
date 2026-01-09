@@ -2,9 +2,9 @@ import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 
 export function middleware(req: NextRequest) {
-  const session = req.cookies.get("sb-access-token")?.value
+  const token = req.cookies.get("sb-access-token")?.value
 
-  if (!session && req.nextUrl.pathname.startsWith("/dashboard")) {
+  if (!token && req.nextUrl.pathname.startsWith("/dashboard")) {
     return NextResponse.redirect(new URL("/login", req.url))
   }
 
