@@ -6,7 +6,15 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
 export async function POST(request: NextRequest) {
   try {
-    // Verificar que viene del admin (simplificado para pruebas)
+    // Verificar autorización básica
+    const authHeader = request.headers.get('authorization')
+    if (!authHeader?.startsWith('Bearer ')) {
+      return NextResponse.json(
+        { error: 'No autorizado' },
+        { status: 401 }
+      )
+    }
+
     const { email, role } = await request.json()
 
     if (!email || !role) {
@@ -16,7 +24,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Crear cliente admin con service role
+    // Crear cliente admin
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
       auth: {
         autoRefreshToken: false,
@@ -24,88 +32,57 @@ export async function POST(request: NextRequest) {
       }
     })
 
-    console.log(`Invitando a ${email} con rol ${role}`)
-
-    // 1. Primero verificar si el usuario ya existe
+    // Verificar si el email ya existe
     const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers()
-    const existingUser = existingUsers?.users?.find(u => u.email === email)
+    const userExists = existingUsers?.users?.some(u => u.email === email)
 
-    if (existingUser) {
-      // Usuario existe, enviar email de recuperación
-      const { error: resetError } = await supabaseAdmin.auth.resetPasswordForEmail(email, {
-        redirectTo: 'https://login3-three.vercel.app/reset-password'
-      })
-
-      if (resetError) {
-        return NextResponse.json(
-          { error: `El usuario ya existe. Error al reenviar invitación: ${resetError.message}` },
-          { status: 400 }
-        )
-      }
-
-      return NextResponse.json({
-        success: true,
-        message: `El usuario ${email} ya existe. Se ha enviado un enlace para establecer contraseña.`,
-        data: { email, role, status: 'password_reset_sent' }
-      })
-    }
-
-    // 2. Crear usuario con invitación
-    // IMPORTANTE: Usar createUser en lugar de inviteUserByEmail
-    const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
-      email: email,
-      password: 'temporary_password_123', // Contraseña temporal
-      email_confirm: true, // Confirmar email automáticamente
-      user_metadata: { role: role }
-    })
-
-    if (createError) {
-      console.error('Error creando usuario:', createError)
+    if (userExists) {
       return NextResponse.json(
-        { error: `Error creando usuario: ${createError.message}` },
-        { status: 500 }
+        { error: `El usuario ${email} ya está registrado` },
+        { status: 400 }
       )
     }
 
-    // 3. Enviar email de recuperación para que establezca su propia contraseña
-    const { error: resetError } = await supabaseAdmin.auth.resetPasswordForEmail(email, {
-      redirectTo: 'https://login3-three.vercel.app/reset-password'
-    })
-
-    if (resetError) {
-      console.error('Error enviando email de recuperación:', resetError)
-      // Continuar de todos modos, el usuario ya está creado
-    }
-
-    // 4. Crear/actualizar perfil en user_profiles
+    // Generar un token único para la invitación (no crear usuario aún)
+    const invitationToken = generateInvitationToken()
+    
+    // Guardar la invitación en una tabla temporal
     await supabaseAdmin
-      .from('user_profiles')
+      .from('pending_invitations')
       .upsert({
-        id: newUser.user?.id,
         email: email,
         role: role,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        token: invitationToken,
+        invited_by: authHeader.replace('Bearer ', ''),
+        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 días
+        created_at: new Date().toISOString()
       }, {
         onConflict: 'email'
       })
 
+    // NOTA: No estamos usando inviteUserByEmail porque crea el usuario automáticamente
+    // En su lugar, enviaremos un email personalizado con nuestro propio enlace
+    
     return NextResponse.json({
       success: true,
-      message: `✅ Usuario ${email} creado exitosamente. Se ha enviado un email para establecer contraseña.`,
+      message: `✅ Invitación generada para ${email}`,
       data: {
         email: email,
         role: role,
-        user_id: newUser.user?.id,
-        status: 'user_created_password_reset_sent'
+        invitation_link: `https://login3-three.vercel.app/register?token=${invitationToken}&email=${encodeURIComponent(email)}`,
+        invited_at: new Date().toISOString()
       }
     })
 
   } catch (error: any) {
-    console.error('Error en API invite-user:', error)
+    console.error('Error en API invite:', error)
     return NextResponse.json(
       { error: `Error interno: ${error.message}` },
       { status: 500 }
     )
   }
+}
+
+function generateInvitationToken() {
+  return 'invite_' + Math.random().toString(36).substring(2) + Date.now().toString(36)
 }
