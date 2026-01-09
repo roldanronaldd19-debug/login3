@@ -12,86 +12,63 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
   const [invitationValid, setInvitationValid] = useState<boolean | null>(null)
+  const [invitationData, setInvitationData] = useState<any>(null)
   const router = useRouter()
 
   useEffect(() => {
-    // Leer parámetros directamente de window.location
-    const hash = window.location.hash
+    // Leer parámetros de la URL
     const searchParams = new URLSearchParams(window.location.search)
-    const urlToken = searchParams.get('token')
-    const type = searchParams.get('type')
+    const token = searchParams.get('token')
+    const emailParam = searchParams.get('email')
     
-    console.log('Hash:', hash)
-    console.log('URL params:', { token: urlToken, type })
-    
-    // Para invitaciones de Supabase, el token viene en el hash
-    if (hash) {
-      // Procesar el hash de Supabase
-      processHash(hash)
-    } else if (urlToken && type === 'invite') {
-      // Token en query params
-      setToken(urlToken)
-      verifyInvitation(urlToken)
+    if (token && emailParam) {
+      // Verificar la invitación
+      verifyInvitation(token, decodeURIComponent(emailParam))
     } else {
       setInvitationValid(false)
       setMessage({
         type: 'error',
-        text: 'Enlace de invitación inválido o expirado. Contacta al administrador.'
+        text: 'Enlace de invitación inválido. Contacta al administrador.'
       })
     }
   }, [])
 
-  const processHash = (hash: string) => {
-    // Extraer parámetros del hash (#access_token=...&refresh_token=...)
-    const params = new URLSearchParams(hash.replace('#', ''))
-    const accessToken = params.get('access_token')
-    const type = params.get('type')
-    
-    if (accessToken && type === 'invite') {
-      setToken(accessToken)
-      verifyInvitation(accessToken)
-    } else {
-      setInvitationValid(false)
-    }
-  }
-
-  const verifyInvitation = async (invitationToken: string) => {
+  const verifyInvitation = async (token: string, invitedEmail: string) => {
     try {
-      // Verificar el token con Supabase
-      const { data, error } = await supabase.auth.getUser(invitationToken)
-      
-      if (error || !data.user) {
-        console.error('Error verificando token:', error)
-        setInvitationValid(false)
-        setMessage({
-          type: 'error',
-          text: 'Enlace de invitación inválido o expirado. Contacta al administrador.'
-        })
-        return
+      // Verificar la invitación en la base de datos
+      const { data, error } = await supabase
+        .from('pending_invitations')
+        .select('*')
+        .eq('token', token)
+        .eq('email', invitedEmail)
+        .single()
+
+      if (error || !data) {
+        throw new Error('Invitación no encontrada')
       }
 
-      // El usuario existe (fue creado por la invitación)
-      setEmail(data.user.email || '')
+      // Verificar que no haya expirado
+      if (new Date(data.expires_at) < new Date()) {
+        throw new Error('La invitación ha expirado')
+      }
+
+      // Verificar que no haya sido usada
+      if (data.used_at) {
+        throw new Error('Esta invitación ya fue utilizada')
+      }
+
+      setEmail(invitedEmail)
+      setInvitationData(data)
       setInvitationValid(true)
       
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error verificando invitación:', error)
       setInvitationValid(false)
+      setMessage({
+        type: 'error',
+        text: error.message || 'Enlace de invitación inválido o expirado.'
+      })
     }
-  }
-
-  const setToken = (token: string) => {
-    // Guardar token en localStorage temporalmente
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('invitation_token', token)
-    }
-  }
-
-  const getToken = () => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('invitation_token')
-    }
-    return null
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -100,6 +77,18 @@ export default function RegisterPage() {
     setMessage(null)
 
     // Validaciones
+    if (!email) {
+      setMessage({ type: 'error', text: 'El email es requerido' })
+      setLoading(false)
+      return
+    }
+
+    if (email !== invitationData?.email) {
+      setMessage({ type: 'error', text: 'El email no coincide con la invitación' })
+      setLoading(false)
+      return
+    }
+
     if (password !== confirmPassword) {
       setMessage({ type: 'error', text: 'Las contraseñas no coinciden' })
       setLoading(false)
@@ -122,62 +111,61 @@ export default function RegisterPage() {
     }
 
     try {
-      const token = getToken()
-      
-      if (token) {
-        // 1. Establecer la sesión con el token de invitación
-        const { error: sessionError } = await supabase.auth.setSession({
-          access_token: token,
-          refresh_token: '' // Refresh token no disponible en invitaciones
-        })
-
-        if (sessionError) {
-          console.warn('Error estableciendo sesión:', sessionError)
-          // Continuar de todos modos
+      // 1. Registrar el usuario en Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            role: invitationData.role
+          },
+          emailRedirectTo: 'https://login3-three.vercel.app/auth/callback'
         }
+      })
 
-        // 2. Actualizar la contraseña del usuario
-        const { error: updateError } = await supabase.auth.updateUser({
-          password: password
-        })
-
-        if (updateError) {
-          // Si falla por sesión, intentar de otra manera
-          console.error('Error actualizando contraseña:', updateError)
-          throw new Error('No se pudo establecer la contraseña. Intenta recargar la página.')
+      if (authError) {
+        if (authError.message.includes('already registered')) {
+          throw new Error('Este email ya está registrado. Usa "¿Olvidaste tu contraseña?" si no la recuerdas.')
         }
-
-        setMessage({ 
-          type: 'success', 
-          text: '✅ Contraseña establecida exitosamente. Redirigiendo...' 
-        })
-
-        // 3. Iniciar sesión con la nueva contraseña
-        setTimeout(async () => {
-          try {
-            const { error: signInError } = await supabase.auth.signInWithPassword({
-              email,
-              password
-            })
-
-            if (signInError) {
-              console.warn('Error iniciando sesión:', signInError)
-              router.push('/login?message=registration_success')
-            } else {
-              router.push('/dashboard')
-            }
-          } catch (signInErr) {
-            router.push('/login?message=registration_success')
-          }
-        }, 2000)
-
-      } else {
-        // No hay token - flujo de registro normal
-        setMessage({ 
-          type: 'error', 
-          text: 'Token de invitación no encontrado. Recarga la página o contacta al administrador.' 
-        })
+        throw authError
       }
+
+      // 2. Marcar la invitación como usada
+      if (invitationData?.token) {
+        await supabase
+          .from('pending_invitations')
+          .update({ 
+            used_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+          .eq('token', invitationData.token)
+      }
+
+      // 3. Crear perfil en user_profiles
+      if (authData.user) {
+        await supabase
+          .from('user_profiles')
+          .upsert({
+            id: authData.user.id,
+            email: email,
+            role: invitationData.role,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          }, {
+            onConflict: 'email'
+          })
+      }
+
+      setMessage({ 
+        type: 'success', 
+        text: '✅ Registro completado exitosamente. Redirigiendo al inicio de sesión...' 
+      })
+
+      // 4. Redirigir al login después de 3 segundos
+      setTimeout(() => {
+        router.push('/login?message=registration_success')
+      }, 3000)
+
     } catch (error: any) {
       console.error('Error en registro:', error)
       setMessage({ 
@@ -207,15 +195,9 @@ export default function RegisterPage() {
           <div>
             <h2 className="text-3xl font-bold text-center text-red-600">Invitación Inválida</h2>
             <p className="mt-2 text-center text-gray-600">
-              El enlace de invitación es inválido, expiró o ya fue utilizado.
+              {message?.text || 'El enlace de invitación es inválido, expiró o ya fue utilizado.'}
             </p>
           </div>
-          
-          {message && (
-            <div className={`p-3 rounded ${message.type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-              {message.text}
-            </div>
-          )}
           
           <div className="text-center">
             <Link
@@ -236,16 +218,18 @@ export default function RegisterPage() {
         <div className="text-center">
           <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
             <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
             </svg>
           </div>
           <h2 className="text-3xl font-bold text-center">Completar Registro</h2>
           <p className="mt-2 text-center text-gray-600">
-            Crea tu contraseña para acceder al sistema
+            Has sido invitado como <span className="font-semibold capitalize">{invitationData?.role}</span>
           </p>
           <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
-            <p className="font-medium text-blue-800">Email registrado:</p>
-            <p className="text-lg font-semibold text-blue-900 mt-1">{email}</p>
+            <p className="font-medium text-blue-800">Instrucciones:</p>
+            <p className="text-sm text-blue-700 mt-1">
+              Ingresa tu información para crear tu cuenta. El email debe coincidir con la invitación.
+            </p>
           </div>
         </div>
 
@@ -262,6 +246,27 @@ export default function RegisterPage() {
           )}
 
           <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium mb-2 text-gray-700">
+                Email
+                <span className="text-red-500 ml-1">*</span>
+              </label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
+                placeholder="tu@email.com"
+                required
+                disabled={!!invitationData?.email}
+              />
+              {invitationData?.email && (
+                <p className="text-xs text-gray-500 mt-1">
+                  Email de la invitación: <span className="font-semibold">{invitationData.email}</span>
+                </p>
+              )}
+            </div>
+
             <div>
               <label className="block text-sm font-medium mb-2 text-gray-700">
                 Contraseña
@@ -321,32 +326,50 @@ export default function RegisterPage() {
             </div>
           </div>
 
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+            <div className="flex">
+              <div className="flex-shrink-0">
+                <svg className="h-5 w-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <h3 className="text-sm font-medium text-yellow-800">Información importante</h3>
+                <div className="mt-2 text-sm text-yellow-700">
+                  <p>• El email debe coincidir exactamente con la invitación recibida</p>
+                  <p>• Tu rol será: <span className="font-semibold capitalize">{invitationData?.role}</span></p>
+                  <p>• Después del registro, podrás iniciar sesión normalmente</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <button
             type="submit"
-            disabled={loading || !password || !confirmPassword || password !== confirmPassword}
+            disabled={loading || !email || !password || !confirmPassword || password !== confirmPassword}
             className="w-full py-3 px-4 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-md hover:shadow-lg"
           >
             {loading ? (
               <div className="flex items-center justify-center">
                 <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-3"></div>
-                Estableciendo contraseña...
+                Creando cuenta...
               </div>
             ) : (
               <div className="flex items-center justify-center">
                 <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
                 </svg>
-                Completar Registro y Acceder
+                Crear Mi Cuenta
               </div>
             )}
           </button>
 
           <div className="text-center pt-4 border-t border-gray-200">
             <p className="text-sm text-gray-600">
-              ¿Problemas con el registro?{' '}
-              <a href="mailto:soporte@tudominio.com" className="text-blue-600 hover:text-blue-800 font-medium">
-                Contactar soporte
-              </a>
+              ¿Tienes una cuenta?{' '}
+              <Link href="/login" className="text-blue-600 hover:text-blue-800 font-medium">
+                Inicia sesión aquí
+              </Link>
             </p>
           </div>
         </form>
