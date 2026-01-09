@@ -1,59 +1,54 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
-// Configuración
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
 export async function POST(request: NextRequest) {
   try {
-    // 1. Obtener token de autorización del header
-    const authHeader = request.headers.get('authorization')
-    const token = authHeader?.replace('Bearer ', '')
+    // 1. Verificar autenticación (usando cookies)
+    const cookieHeader = request.headers.get('cookie') || ''
+    const accessTokenMatch = cookieHeader.match(/sb-access-token=([^;]+)/)
     
-    if (!token) {
+    if (!accessTokenMatch) {
       return NextResponse.json(
-        { error: 'Token de autorización requerido' },
+        { error: 'No autorizado. Inicia sesión nuevamente.' },
         { status: 401 }
       )
     }
 
-    // 2. Verificar el token usando Supabase
+    const accessToken = decodeURIComponent(accessTokenMatch[1])
     const supabaseAuth = createClient(supabaseUrl, supabaseAnonKey)
     
-    const { data: { user }, error: authError } = await supabaseAuth.auth.getUser(token)
+    const { data: { user }, error: authError } = await supabaseAuth.auth.getUser(accessToken)
     
     if (authError || !user) {
-      console.error('Error de autenticación:', authError)
       return NextResponse.json(
-        { error: 'Token inválido o expirado' },
+        { error: 'Sesión inválida o expirada' },
         { status: 401 }
       )
     }
 
-    // 3. Verificar que el usuario sea admin
+    // 2. Verificar que el usuario sea admin
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false
-      }
+      auth: { autoRefreshToken: false, persistSession: false }
     })
 
-    const { data: userProfile, error: profileError } = await supabaseAdmin
+    const { data: userProfile } = await supabaseAdmin
       .from('user_profiles')
       .select('role')
       .eq('id', user.id)
       .single()
 
-    if (profileError || userProfile?.role !== 'admin') {
+    if (userProfile?.role !== 'admin') {
       return NextResponse.json(
         { error: 'Solo administradores pueden enviar invitaciones' },
         { status: 403 }
       )
     }
 
-    // 4. Obtener datos de la solicitud
+    // 3. Obtener datos
     const { email, role } = await request.json()
 
     if (!email || !role) {
@@ -63,9 +58,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 5. Verificar si el email ya existe
-    const { data: existingUser } = await supabaseAdmin.auth.admin.listUsers()
-    const userExists = existingUser?.users?.some(u => u.email === email)
+    // 4. Verificar si el usuario ya existe
+    const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers()
+    const userExists = existingUsers?.users?.some(u => u.email === email)
 
     if (userExists) {
       return NextResponse.json(
@@ -74,11 +69,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 6. Invitar usuario
-    const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
-      data: { role },
-      redirectTo: 'https://login3-three.vercel.app/register'
-    })
+    // 5. IMPORTANTE: Invitar usuario con el redirectTo CORRECTO
+    const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(
+      email, 
+      {
+        data: { role },
+        redirectTo: `${supabaseUrl}/auth/v1/callback` // Este es el callback de Supabase
+      }
+    )
 
     if (inviteError) {
       console.error('Error invitando usuario:', inviteError)
@@ -88,7 +86,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 7. Crear registro en user_profiles
+    // 6. Crear registro en user_profiles
     await supabaseAdmin
       .from('user_profiles')
       .upsert({
@@ -97,16 +95,16 @@ export async function POST(request: NextRequest) {
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       }, {
-        onConflict: 'email',
-        ignoreDuplicates: false
+        onConflict: 'email'
       })
 
     return NextResponse.json({
       success: true,
       message: `✅ Invitación enviada a ${email}`,
+      note: 'El usuario recibirá un email para establecer su contraseña',
       data: {
-        email: email,
-        role: role,
+        email,
+        role,
         invited_at: new Date().toISOString()
       }
     })
