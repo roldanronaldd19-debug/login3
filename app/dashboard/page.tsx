@@ -1,7 +1,7 @@
 "use client"
-import { supabase } from "@/lib/supabase"
-import { useEffect } from "react"
 import { useRouter } from "next/navigation"
+import { useEffect } from "react"
+import { supabase } from "@/lib/supabase"
 
 export default function Dashboard() {
   const router = useRouter()
