@@ -74,14 +74,13 @@ export default function AdminUsersPage() {
   setInviteMessage(null)
 
   try {
-    // 1. Obtener el token de sesión actual
+    // Obtener token de sesión
     const { data: { session } } = await supabase.auth.getSession()
     
     if (!session?.access_token) {
       throw new Error('No hay sesión activa')
     }
 
-    // 2. Usar nuestra API route con el token
     const response = await fetch('/api/invite', {
       method: 'POST',
       headers: {
@@ -106,7 +105,7 @@ export default function AdminUsersPage() {
     })
     setInviteEmail('')
     
-    // Recargar lista después de un momento
+    // Recargar lista
     setTimeout(() => {
       loadUsers()
     }, 2000)
@@ -407,4 +406,5 @@ export default function AdminUsersPage() {
     </div>
   )
 }
+
 
