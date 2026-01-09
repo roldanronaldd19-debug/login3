@@ -72,91 +72,58 @@ export default function AdminUsersPage() {
   }
 
   const handleInviteUser = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setInviteLoading(true)
-    setInviteMessage(null)
+  e.preventDefault()
+  setInviteLoading(true)
+  setInviteMessage(null)
 
-    try {
-      // Obtener token de sesión
-      const { data: { session } } = await supabase.auth.getSession()
-      
-      if (!session?.access_token) {
-        throw new Error('No hay sesión activa')
-      }
-
-      const response = await fetch('/api/invite', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`
-        },
-        body: JSON.stringify({
-          email: inviteEmail,
-          role: inviteRole
-        })
-      })
-
-      const result = await response.json()
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Error al generar invitación')
-      }
-
-      // Mostrar el enlace de invitación para copiar
-      const invitationLink = result.data.invitation_link
-      
-      // Crear mensaje con JSX
-      const successMessage = (
-        <div>
-          <p className="font-semibold mb-2">✅ Invitación generada para {inviteEmail}</p>
-          <div className="mt-3 p-3 bg-blue-50 rounded border border-blue-200">
-            <p className="text-sm font-medium text-blue-800 mb-2">Enlace de invitación:</p>
-            <div className="flex items-center">
-              <input
-                type="text"
-                readOnly
-                value={invitationLink}
-                className="flex-1 p-2 text-sm bg-white border border-blue-300 rounded-l"
-                onClick={(e) => (e.target as HTMLInputElement).select()}
-              />
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(invitationLink)
-                  alert('Enlace copiado al portapapeles')
-                }}
-                className="px-3 py-2 bg-blue-600 text-white text-sm rounded-r hover:bg-blue-700"
-              >
-                📋 Copiar
-              </button>
-            </div>
-            <p className="text-xs text-blue-600 mt-2">
-              Envía este enlace al usuario por email o mensaje.
-            </p>
-          </div>
-        </div>
-      )
-
-      setInviteMessage({ 
-        type: 'success', 
-        text: successMessage
-      })
-      setInviteEmail('')
-      
-      // Recargar lista
-      setTimeout(() => {
-        loadUsers()
-      }, 2000)
-      
-    } catch (error: any) {
-      console.error('Error generando invitación:', error)
-      setInviteMessage({ 
-        type: 'error', 
-        text: `❌ ${error.message}` 
-      })
-    } finally {
-      setInviteLoading(false)
+  try {
+    // Obtener token de sesión
+    const { data: { session } } = await supabase.auth.getSession()
+    
+    if (!session?.access_token) {
+      throw new Error('No hay sesión activa')
     }
+
+    const response = await fetch('/api/invite', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`
+      },
+      body: JSON.stringify({
+        email: inviteEmail,
+        role: inviteRole
+      })
+    })
+
+    const result = await response.json()
+
+    if (!response.ok) {
+      throw new Error(result.error || 'Error al enviar invitación')
+    }
+
+    // Mensaje simple de éxito
+    setInviteMessage({ 
+      type: 'success', 
+      text: result.message || `✅ Invitación enviada a ${inviteEmail}` 
+    })
+    setInviteEmail('')
+    
+    // Recargar lista
+    setTimeout(() => {
+      loadUsers()
+    }, 2000)
+    
+  } catch (error: any) {
+    console.error('Error enviando invitación:', error)
+    setInviteMessage({ 
+      type: 'error', 
+      text: `❌ ${error.message}` 
+    })
+  } finally {
+    setInviteLoading(false)
   }
+}
 
   const handleUpdateRole = async (userId: string, newRole: string) => {
     setUpdateLoading(userId)
@@ -182,39 +149,39 @@ export default function AdminUsersPage() {
   }
 
   const handleResendInvite = async (email: string, role: string) => {
-    if (!confirm(`¿Reenviar invitación a ${email}?`)) return
+  if (!confirm(`¿Reenviar invitación a ${email}?`)) return
 
-    try {
-      // Obtener token de sesión
-      const { data: { session } } = await supabase.auth.getSession()
-      
-      if (!session?.access_token) {
-        throw new Error('No hay sesión activa')
-      }
-
-      const response = await fetch('/api/invite', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`
-        },
-        body: JSON.stringify({
-          email: email,
-          role: role
-        })
-      })
-
-      const result = await response.json()
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Error al reenviar invitación')
-      }
-
-      alert(`✅ Invitación reenviada a ${email}`)
-    } catch (error: any) {
-      alert(`❌ Error: ${error.message}`)
+  try {
+    // Obtener token de sesión
+    const { data: { session } } = await supabase.auth.getSession()
+    
+    if (!session?.access_token) {
+      throw new Error('No hay sesión activa')
     }
+
+    const response = await fetch('/api/invite', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`
+      },
+      body: JSON.stringify({
+        email: email,
+        role: role
+      })
+    })
+
+    const result = await response.json()
+
+    if (!response.ok) {
+      throw new Error(result.error || 'Error al reenviar invitación')
+    }
+
+    alert(result.message || `✅ Invitación reenviada a ${email}`)
+  } catch (error: any) {
+    alert(`❌ Error: ${error.message}`)
   }
+}
 
   if (loading) {
     return (
@@ -445,3 +412,4 @@ export default function AdminUsersPage() {
     </div>
   )
 }
+
