@@ -17,3 +17,4 @@ export async function GET(request: NextRequest) {
   // Redirigir al dashboard después de autenticación
   return NextResponse.redirect(new URL('/dashboard', request.url))
 }
+
