@@ -32,7 +32,6 @@ export default function AuthForm({ mode }: AuthFormProps) {
           
           if (loginError) throw loginError
           setMessage({ type: 'success', text: 'Inicio de sesión exitoso' })
-          // Redirigir al dashboard usando router
           router.push('/dashboard')
           break
 
@@ -45,7 +44,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
             email,
             password,
             options: {
-              emailRedirectTo: `${window.location.origin}/api/auth/callback`
+              emailRedirectTo: 'https://login3-three.vercel.app/auth/callback'
             }
           })
           
@@ -58,14 +57,14 @@ export default function AuthForm({ mode }: AuthFormProps) {
 
         case 'forgot-password':
           const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
-            redirectTo: `${window.location.origin}/reset-password`
+            redirectTo: 'https://login3-three.vercel.app/reset-password'
           })
           
           if (resetError) throw resetError
           setEmailSent(true)
           setMessage({ 
             type: 'success', 
-            text: 'Se ha enviado un enlace de recuperación a tu email' 
+            text: 'Se ha enviado un enlace de recuperación a tu email. Revisa tu bandeja de entrada.' 
           })
           break
       }
