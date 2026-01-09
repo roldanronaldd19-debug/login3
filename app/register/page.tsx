@@ -1,12 +1,11 @@
 'use client'
 
-import { useEffect, useState, Suspense } from 'react'
+import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
-// Componente principal envuelto en Suspense
-function RegisterContent() {
+export default function RegisterPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -14,11 +13,11 @@ function RegisterContent() {
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
   const [invitationValid, setInvitationValid] = useState<boolean | null>(null)
   const router = useRouter()
-  const searchParams = useSearchParams()
 
   useEffect(() => {
-    // Verificar si hay un token en la URL (de la invitación)
+    // Leer parámetros directamente de window.location
     const hash = window.location.hash
+    const searchParams = new URLSearchParams(window.location.search)
     const urlToken = searchParams.get('token')
     const type = searchParams.get('type')
     
@@ -40,7 +39,7 @@ function RegisterContent() {
         text: 'Enlace de invitación inválido o expirado. Contacta al administrador.'
       })
     }
-  }, [searchParams])
+  }, [])
 
   const processHash = (hash: string) => {
     // Extraer parámetros del hash (#access_token=...&refresh_token=...)
@@ -353,21 +352,5 @@ function RegisterContent() {
         </form>
       </div>
     </div>
-  )
-}
-
-// Componente principal con Suspense
-export default function RegisterPage() {
-  return (
-    <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4">Cargando página de registro...</p>
-        </div>
-      </div>
-    }>
-      <RegisterContent />
-    </Suspense>
   )
 }
