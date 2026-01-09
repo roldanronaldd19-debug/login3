@@ -10,25 +10,67 @@ export default function ResetPasswordPage() {
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
   const [session, setSession] = useState<any>(null)
+  const [isProcessingCode, setIsProcessingCode] = useState(true)
   const router = useRouter()
 
   useEffect(() => {
-    // Verificar si hay una sesión activa (necesaria para resetear contraseña)
-    const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      
-      if (!session) {
-        // Si no hay sesión, podría ser que el usuario llegó sin el token
+    // Manejar el código de recuperación de Supabase
+    const handleRecoveryCode = async () => {
+      try {
+        const urlParams = new URLSearchParams(window.location.search)
+        const code = urlParams.get('code')
+        
+        console.log('Código de recuperación:', code)
+        
+        if (code) {
+          // Supabase envía el código como query parameter, no como hash
+          setIsProcessingCode(true)
+          
+          // Intercambiar el código por una sesión
+          const { error } = await supabase.auth.exchangeCodeForSession(code)
+          
+          if (error) {
+            console.error('Error intercambiando código:', error)
+            setMessage({ 
+              type: 'error', 
+              text: 'El enlace de recuperación es inválido o ha expirado.' 
+            })
+            setIsProcessingCode(false)
+            return
+          }
+          
+          // Obtener la sesión actual
+          const { data: { session } } = await supabase.auth.getSession()
+          
+          if (session) {
+            setSession(session)
+            console.log('Sesión establecida para:', session.user.email)
+          }
+        } else {
+          // Verificar si ya hay una sesión activa
+          const { data: { session } } = await supabase.auth.getSession()
+          
+          if (session) {
+            setSession(session)
+          } else {
+            setMessage({ 
+              type: 'error', 
+              text: 'No tienes permiso para restablecer la contraseña. Solicita un nuevo enlace.' 
+            })
+          }
+        }
+      } catch (error: any) {
+        console.error('Error en handleRecoveryCode:', error)
         setMessage({ 
           type: 'error', 
-          text: 'Enlace inválido o expirado. Por favor solicita un nuevo enlace de recuperación.' 
+          text: 'Error al procesar el enlace de recuperación.' 
         })
-      } else {
-        setSession(session)
+      } finally {
+        setIsProcessingCode(false)
       }
     }
 
-    checkSession()
+    handleRecoveryCode()
   }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -49,6 +91,7 @@ export default function ResetPasswordPage() {
     }
 
     try {
+      // Actualizar la contraseña
       const { error } = await supabase.auth.updateUser({
         password: password
       })
@@ -60,16 +103,32 @@ export default function ResetPasswordPage() {
         text: '¡Contraseña actualizada exitosamente!' 
       })
       
-      // Redirigir al dashboard después de 2 segundos
-      setTimeout(() => {
-        router.push('/dashboard')
+      // Cerrar sesión y redirigir al login
+      setTimeout(async () => {
+        await supabase.auth.signOut()
+        router.push('/login?message=password_reset_success')
       }, 2000)
       
     } catch (error: any) {
-      setMessage({ type: 'error', text: error.message })
+      console.error('Error actualizando contraseña:', error)
+      setMessage({ 
+        type: 'error', 
+        text: error.message || 'Error al actualizar la contraseña' 
+      })
     } finally {
       setLoading(false)
     }
+  }
+
+  if (isProcessingCode) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4">Procesando enlace de recuperación...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -87,12 +146,25 @@ export default function ResetPasswordPage() {
             <div className="text-red-600 mb-4">
               No tienes permiso para restablecer la contraseña.
             </div>
-            <a 
-              href="/forgot-password" 
-              className="text-blue-600 hover:text-blue-800"
-            >
-              Solicitar nuevo enlace
-            </a>
+            <div className="space-y-4">
+              <p className="text-gray-600">
+                El enlace de recuperación es inválido, expiró o ya fue utilizado.
+              </p>
+              <div className="space-y-2">
+                <a 
+                  href="/forgot-password" 
+                  className="inline-block w-full px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                >
+                  Solicitar nuevo enlace
+                </a>
+                <a 
+                  href="/login" 
+                  className="inline-block w-full px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+                >
+                  Volver al inicio de sesión
+                </a>
+              </div>
+            </div>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -101,6 +173,21 @@ export default function ResetPasswordPage() {
                 {message.text}
               </div>
             )}
+
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+              <div className="flex items-center">
+                <div className="flex-shrink-0">
+                  <svg className="h-5 w-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <div className="ml-3">
+                  <p className="text-sm text-blue-700">
+                    Estableciendo nueva contraseña para: <span className="font-semibold">{session.user.email}</span>
+                  </p>
+                </div>
+              </div>
+            </div>
 
             <div>
               <label className="block text-sm font-medium mb-1">Nueva Contraseña</label>
