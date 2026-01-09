@@ -74,18 +74,11 @@ export default function AdminUsersPage() {
   setInviteMessage(null)
 
   try {
-    // Obtener token de sesión
-    const { data: { session } } = await supabase.auth.getSession()
-    
-    if (!session?.access_token) {
-      throw new Error('No hay sesión activa')
-    }
-
-    const response = await fetch('/api/invite', {
+    // Usar la nueva API route
+    const response = await fetch('/api/invite-user', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${session.access_token}`
       },
       body: JSON.stringify({
         email: inviteEmail,
@@ -101,7 +94,7 @@ export default function AdminUsersPage() {
 
     setInviteMessage({ 
       type: 'success', 
-      text: result.message || `✅ Invitación enviada a ${inviteEmail}` 
+      text: result.message || `✅ Usuario ${inviteEmail} creado exitosamente. Se ha enviado email para establecer contraseña.` 
     })
     setInviteEmail('')
     
@@ -406,5 +399,6 @@ export default function AdminUsersPage() {
     </div>
   )
 }
+
 
 
