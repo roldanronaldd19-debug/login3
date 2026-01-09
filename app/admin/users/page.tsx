@@ -74,39 +74,39 @@ export default function AdminUsersPage() {
     setInviteMessage(null)
 
     try {
-      // 1. Invitar usuario por email usando Supabase Auth
-      const { error: inviteError } = await supabase.auth.admin.inviteUserByEmail(
-        inviteEmail,
-        {
-          data: { role: inviteRole },
-          redirectTo: 'https://login3-three.vercel.app/register'
-        }
-      )
-
-      if (inviteError) throw inviteError
-
-      // 2. Crear registro en user_profiles (si la función trigger no lo hace automáticamente)
-      const { error: profileError } = await supabase
-        .from('user_profiles')
-        .insert({
+      // Usar nuestra API route en lugar de llamada directa
+      const response = await fetch('/api/invite', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
           email: inviteEmail,
           role: inviteRole
         })
+      })
 
-      if (profileError && !profileError.message.includes('duplicate key')) {
-        console.warn('Profile creation warning:', profileError)
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Error al enviar invitación')
       }
 
       setInviteMessage({ 
         type: 'success', 
-        text: `Invitación enviada a ${inviteEmail} con rol ${inviteRole}` 
+        text: `✅ Invitación enviada a ${inviteEmail} con rol ${inviteRole}` 
       })
       setInviteEmail('')
-      loadUsers() // Recargar lista
+      
+      // Recargar lista después de un momento
+      setTimeout(() => {
+        loadUsers()
+      }, 2000)
+      
     } catch (error: any) {
       setInviteMessage({ 
         type: 'error', 
-        text: error.message || 'Error al enviar invitación' 
+        text: `❌ ${error.message}` 
       })
     } finally {
       setInviteLoading(false)
@@ -136,20 +136,30 @@ export default function AdminUsersPage() {
     }
   }
 
-  const handleDeleteUser = async (userId: string, email: string) => {
-    if (!confirm(`¿Estás seguro de eliminar al usuario ${email}?`)) return
+  const handleResendInvite = async (email: string, role: string) => {
+    if (!confirm(`¿Reenviar invitación a ${email}?`)) return
 
     try {
-      // Eliminar de auth.users (esto requiere permisos de admin)
-      const { error: authError } = await supabase.auth.admin.deleteUser(userId)
-      
-      if (authError) throw authError
+      const response = await fetch('/api/invite', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: email,
+          role: role
+        })
+      })
 
-      // Recargar lista
-      loadUsers()
-    } catch (error) {
-      console.error('Error deleting user:', error)
-      alert('Error al eliminar usuario')
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Error al reenviar invitación')
+      }
+
+      alert(`✅ Invitación reenviada a ${email}`)
+    } catch (error: any) {
+      alert(`❌ Error: ${error.message}`)
     }
   }
 
@@ -193,8 +203,17 @@ export default function AdminUsersPage() {
             
             <form onSubmit={handleInviteUser} className="space-y-4">
               {inviteMessage && (
-                <div className={`p-3 rounded ${inviteMessage.type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                  {inviteMessage.text}
+                <div className={`p-3 rounded ${
+                  inviteMessage.type === 'success' 
+                    ? 'bg-green-100 text-green-800 border border-green-200' 
+                    : 'bg-red-100 text-red-800 border border-red-200'
+                }`}>
+                  <div className="flex items-start">
+                    <span className="mr-2 text-lg">
+                      {inviteMessage.type === 'success' ? '✅' : '❌'}
+                    </span>
+                    <span>{inviteMessage.text}</span>
+                  </div>
                 </div>
               )}
 
@@ -209,6 +228,9 @@ export default function AdminUsersPage() {
                     placeholder="nuevo@ejemplo.com"
                     required
                   />
+                  <p className="text-xs text-gray-500 mt-1">
+                    El usuario recibirá un email con enlace para registrarse
+                  </p>
                 </div>
                 
                 <div>
@@ -218,9 +240,12 @@ export default function AdminUsersPage() {
                     onChange={(e) => setInviteRole(e.target.value as any)}
                     className="w-full p-2 border rounded"
                   >
-                    <option value="usuario">Usuario</option>
-                    <option value="tecnico">Técnico</option>
+                    <option value="usuario">👤 Usuario</option>
+                    <option value="tecnico">🔧 Técnico</option>
                   </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Los admins solo se crean manualmente
+                  </p>
                 </div>
               </div>
 
@@ -228,20 +253,24 @@ export default function AdminUsersPage() {
                 <button
                   type="submit"
                   disabled={inviteLoading}
-                  className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50"
+                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 flex items-center"
                 >
-                  {inviteLoading ? 'Enviando...' : 'Enviar Invitación'}
+                  {inviteLoading ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Enviando...
+                    </>
+                  ) : (
+                    '📨 Enviar Invitación'
+                  )}
                 </button>
-                <p className="text-sm text-gray-500 mt-2">
-                  El usuario recibirá un email para completar su registro.
-                </p>
               </div>
             </form>
           </div>
 
           {/* Tabla de Usuarios */}
           <div className="bg-white shadow rounded-lg overflow-hidden">
-            <div className="px-6 py-4 border-b">
+            <div className="px-6 py-4 border-b bg-gray-50">
               <h2 className="text-2xl font-bold">Usuarios Registrados ({users.length})</h2>
             </div>
             
@@ -256,7 +285,10 @@ export default function AdminUsersPage() {
                       Rol
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Fecha Registro
+                      Estado
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Fecha
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Acciones
@@ -285,42 +317,42 @@ export default function AdminUsersPage() {
                           value={user.role}
                           onChange={(e) => handleUpdateRole(user.id, e.target.value)}
                           disabled={updateLoading === user.id || user.role === 'admin'}
-                          className={`text-sm rounded border ${
-                            user.role === 'admin' ? 'bg-yellow-100 text-yellow-800' :
-                            user.role === 'tecnico' ? 'bg-blue-100 text-blue-800' :
-                            'bg-gray-100 text-gray-800'
-                          } ${user.role === 'admin' ? 'cursor-not-allowed' : ''}`}
+                          className={`text-sm px-2 py-1 rounded border ${
+                            user.role === 'admin' ? 'bg-yellow-100 text-yellow-800 border-yellow-300' :
+                            user.role === 'tecnico' ? 'bg-blue-100 text-blue-800 border-blue-300' :
+                            'bg-gray-100 text-gray-800 border-gray-300'
+                          } ${user.role === 'admin' ? 'cursor-not-allowed' : 'cursor-pointer'}`}
                         >
-                          <option value="admin">Admin</option>
-                          <option value="tecnico">Técnico</option>
-                          <option value="usuario">Usuario</option>
+                          <option value="admin">👑 Admin</option>
+                          <option value="tecnico">🔧 Técnico</option>
+                          <option value="usuario">👤 Usuario</option>
                         </select>
                         {updateLoading === user.id && (
                           <span className="ml-2 text-xs text-gray-500">Actualizando...</span>
                         )}
                       </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`px-2 py-1 text-xs rounded-full ${
+                          user.id ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                        }`}>
+                          {user.id ? '✅ Activo' : '⏳ Pendiente'}
+                        </span>
+                      </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {new Date(user.created_at).toLocaleDateString('es-ES')}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
                         {user.role !== 'admin' && (
-                          <button
-                            onClick={() => handleDeleteUser(user.id, user.email)}
-                            className="text-red-600 hover:text-red-900 mr-4"
-                          >
-                            Eliminar
-                          </button>
+                          <>
+                            <button
+                              onClick={() => handleResendInvite(user.email, user.role)}
+                              className="text-blue-600 hover:text-blue-900 px-2 py-1 hover:bg-blue-50 rounded"
+                              title="Reenviar invitación"
+                            >
+                              ↻ Reenviar
+                            </button>
+                          </>
                         )}
-                        <button
-                          onClick={() => {
-                            // Reenviar invitación
-                            setInviteEmail(user.email)
-                            setInviteRole(user.role === 'tecnico' ? 'tecnico' : 'usuario')
-                          }}
-                          className="text-blue-600 hover:text-blue-900"
-                        >
-                          Reenviar Invitación
-                        </button>
                       </td>
                     </tr>
                   ))}
@@ -329,16 +361,29 @@ export default function AdminUsersPage() {
             </div>
           </div>
 
-          {/* Información para el admin */}
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
-            <h3 className="font-bold text-lg mb-2">📋 Instrucciones para el Administrador</h3>
-            <ul className="list-disc list-inside space-y-2 text-gray-700">
-              <li><strong>Invitar usuario:</strong> Ingresa el email y selecciona el rol (Usuario o Técnico).</li>
-              <li><strong>Cambiar rol:</strong> Usa el dropdown en la columna "Rol" para actualizar permisos.</li>
-              <li><strong>Eliminar usuario:</strong> Solo disponible para usuarios no administradores.</li>
-              <li><strong>Reenviar invitación:</strong> Útil si el usuario no recibió el email inicial.</li>
-              <li><strong>Nota:</strong> Los administradores no pueden cambiar su propio rol por seguridad.</li>
-            </ul>
+          {/* Instrucciones */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
+            <h3 className="font-bold text-lg mb-3 text-blue-800">📋 Guía Rápida</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <h4 className="font-semibold mb-2 text-blue-700">Para Invitar Usuarios:</h4>
+                <ol className="list-decimal list-inside space-y-1 text-sm text-blue-600">
+                  <li>Ingresa el email del nuevo usuario</li>
+                  <li>Selecciona el rol (Usuario o Técnico)</li>
+                  <li>Haz clic en "Enviar Invitación"</li>
+                  <li>El usuario recibirá un email con enlace para registrarse</li>
+                </ol>
+              </div>
+              <div>
+                <h4 className="font-semibold mb-2 text-blue-700">Para Gestionar Usuarios:</h4>
+                <ul className="list-disc list-inside space-y-1 text-sm text-blue-600">
+                  <li>Cambia el rol usando el dropdown en la columna "Rol"</li>
+                  <li>Reenvía invitaciones con el botón "↻ Reenviar"</li>
+                  <li>Los usuarios pendientes aparecen con estado "⏳ Pendiente"</li>
+                  <li>Los usuarios activos aparecen con estado "✅ Activo"</li>
+                </ul>
+              </div>
+            </div>
           </div>
         </div>
       </main>
