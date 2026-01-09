@@ -102,7 +102,6 @@ export default function AdminUsersPage() {
       throw new Error(result.error || 'Error al enviar invitación')
     }
 
-    // Mensaje simple de éxito
     setInviteMessage({ 
       type: 'success', 
       text: result.message || `✅ Invitación enviada a ${inviteEmail}` 
@@ -412,4 +411,5 @@ export default function AdminUsersPage() {
     </div>
   )
 }
+
 
