@@ -8,21 +8,50 @@ export default function AuthCallbackPage() {
   const router = useRouter()
 
   useEffect(() => {
-    const handleAuthCallback = async () => {
-      // Verificar si hay un hash en la URL (para recuperación de contraseña)
-      const hash = window.location.hash
+    const handleCallback = async () => {
+      console.log('Procesando callback de autenticación...')
       
-      if (hash && hash.includes('access_token')) {
-        // Procesar el token
-        const { error } = await supabase.auth.getSession()
+      // Verificar si hay un hash en la URL
+      const hash = window.location.hash
+      console.log('Hash de la URL:', hash)
+      
+      if (hash) {
+        const params = new URLSearchParams(hash.substring(1))
+        const type = params.get('type')
+        const accessToken = params.get('access_token')
         
-        if (error) {
-          console.error('Error procesando token:', error)
-          router.push('/login?error=auth_failed')
-        } else {
-          // Redirigir al reset-password si es recuperación
-          // o al dashboard si es verificación de email
-          router.push('/reset-password')
+        console.log('Parámetros:', { type, accessToken })
+        
+        if (type === 'invite' && accessToken) {
+          // Es una invitación, redirigir al registro con el token
+          router.push(`/register#${hash}`)
+          return
+        }
+        
+        if (type === 'recovery' && accessToken) {
+          // Es recuperación de contraseña, redirigir al reset-password
+          router.push(`/reset-password#${hash}`)
+          return
+        }
+        
+        if (accessToken) {
+          // Es un login normal, intentar establecer sesión
+          try {
+            const { error } = await supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: params.get('refresh_token') || ''
+            })
+            
+            if (error) {
+              console.error('Error estableciendo sesión:', error)
+              router.push('/login?error=auth_failed')
+            } else {
+              router.push('/dashboard')
+            }
+          } catch (error) {
+            console.error('Error en callback:', error)
+            router.push('/login')
+          }
         }
       } else {
         // Si no hay hash, redirigir al login
@@ -30,7 +59,7 @@ export default function AuthCallbackPage() {
       }
     }
 
-    handleAuthCallback()
+    handleCallback()
   }, [router])
 
   return (
