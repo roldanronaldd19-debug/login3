@@ -10,9 +10,12 @@ export default function AuthForm() {
 
   const login = async (e: any) => {
     e.preventDefault()
+
     const { error } = await supabase.auth.signInWithPassword({ email, password })
-    if (!error) router.push("/dashboard")
-    else alert(error.message)
+
+    if (error) return alert(error.message)
+
+    router.push("/dashboard")
   }
 
   return (
