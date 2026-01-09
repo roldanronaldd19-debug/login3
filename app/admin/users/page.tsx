@@ -69,49 +69,58 @@ export default function AdminUsersPage() {
   }
 
   const handleInviteUser = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setInviteLoading(true)
-    setInviteMessage(null)
+  e.preventDefault()
+  setInviteLoading(true)
+  setInviteMessage(null)
 
-    try {
-      // Usar nuestra API route en lugar de llamada directa
-      const response = await fetch('/api/invite', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: inviteEmail,
-          role: inviteRole
-        })
-      })
-
-      const result = await response.json()
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Error al enviar invitación')
-      }
-
-      setInviteMessage({ 
-        type: 'success', 
-        text: `✅ Invitación enviada a ${inviteEmail} con rol ${inviteRole}` 
-      })
-      setInviteEmail('')
-      
-      // Recargar lista después de un momento
-      setTimeout(() => {
-        loadUsers()
-      }, 2000)
-      
-    } catch (error: any) {
-      setInviteMessage({ 
-        type: 'error', 
-        text: `❌ ${error.message}` 
-      })
-    } finally {
-      setInviteLoading(false)
+  try {
+    // 1. Obtener el token de sesión actual
+    const { data: { session } } = await supabase.auth.getSession()
+    
+    if (!session?.access_token) {
+      throw new Error('No hay sesión activa')
     }
+
+    // 2. Usar nuestra API route con el token
+    const response = await fetch('/api/invite', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`
+      },
+      body: JSON.stringify({
+        email: inviteEmail,
+        role: inviteRole
+      })
+    })
+
+    const result = await response.json()
+
+    if (!response.ok) {
+      throw new Error(result.error || 'Error al enviar invitación')
+    }
+
+    setInviteMessage({ 
+      type: 'success', 
+      text: result.message || `✅ Invitación enviada a ${inviteEmail}` 
+    })
+    setInviteEmail('')
+    
+    // Recargar lista después de un momento
+    setTimeout(() => {
+      loadUsers()
+    }, 2000)
+    
+  } catch (error: any) {
+    console.error('Error enviando invitación:', error)
+    setInviteMessage({ 
+      type: 'error', 
+      text: `❌ ${error.message}` 
+    })
+  } finally {
+    setInviteLoading(false)
   }
+}
 
   const handleUpdateRole = async (userId: string, newRole: string) => {
     setUpdateLoading(userId)
@@ -137,31 +146,39 @@ export default function AdminUsersPage() {
   }
 
   const handleResendInvite = async (email: string, role: string) => {
-    if (!confirm(`¿Reenviar invitación a ${email}?`)) return
+  if (!confirm(`¿Reenviar invitación a ${email}?`)) return
 
-    try {
-      const response = await fetch('/api/invite', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: email,
-          role: role
-        })
-      })
-
-      const result = await response.json()
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Error al reenviar invitación')
-      }
-
-      alert(`✅ Invitación reenviada a ${email}`)
-    } catch (error: any) {
-      alert(`❌ Error: ${error.message}`)
+  try {
+    // Obtener el token de sesión actual
+    const { data: { session } } = await supabase.auth.getSession()
+    
+    if (!session?.access_token) {
+      throw new Error('No hay sesión activa')
     }
+
+    const response = await fetch('/api/invite', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`
+      },
+      body: JSON.stringify({
+        email: email,
+        role: role
+      })
+    })
+
+    const result = await response.json()
+
+    if (!response.ok) {
+      throw new Error(result.error || 'Error al reenviar invitación')
+    }
+
+    alert(result.message || `✅ Invitación reenviada a ${email}`)
+  } catch (error: any) {
+    alert(`❌ Error: ${error.message}`)
   }
+}
 
   if (loading) {
     return (
@@ -390,3 +407,4 @@ export default function AdminUsersPage() {
     </div>
   )
 }
+
