@@ -32,11 +32,11 @@ export default function AuthForm({ mode }: AuthFormProps) {
           
           if (loginError) throw loginError
           setMessage({ type: 'success', text: 'Inicio de sesión exitoso' })
+          // Redirigir al dashboard usando router
           router.push('/dashboard')
           break
 
         case 'register':
-          // Solo para registro por invitación
           if (password !== confirmPassword) {
             throw new Error('Las contraseñas no coinciden')
           }
@@ -45,7 +45,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
             email,
             password,
             options: {
-              emailRedirectTo: 'https://login3-three.vercel.app/auth/callback'
+              emailRedirectTo: `${window.location.origin}/api/auth/callback`
             }
           })
           
@@ -58,14 +58,14 @@ export default function AuthForm({ mode }: AuthFormProps) {
 
         case 'forgot-password':
           const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
-            redirectTo: 'https://login3-three.vercel.app/reset-password'
+            redirectTo: `${window.location.origin}/reset-password`
           })
           
           if (resetError) throw resetError
           setEmailSent(true)
           setMessage({ 
             type: 'success', 
-            text: 'Se ha enviado un enlace de recuperación a tu email. Revisa tu bandeja de entrada.' 
+            text: 'Se ha enviado un enlace de recuperación a tu email' 
           })
           break
       }
@@ -162,23 +162,33 @@ export default function AuthForm({ mode }: AuthFormProps) {
       >
         {loading ? 'Cargando...' : 
           mode === 'login' ? 'Iniciar Sesión' :
-          mode === 'register' ? 'Completar Registro' :
+          mode === 'register' ? 'Registrarse' :
           'Enviar enlace de recuperación'}
       </button>
 
-      {mode === 'login' && (
-        <div className="text-center text-sm text-gray-600">
-          <p>El registro solo está disponible por invitación del administrador.</p>
-        </div>
-      )}
-
-      {(mode === 'register' || mode === 'forgot-password') && (
-        <div className="text-center text-sm">
-          <a href="/login" className="text-blue-600 hover:text-blue-800">
-            Volver al inicio de sesión
-          </a>
-        </div>
-      )}
+      <div className="text-center text-sm">
+        {mode === 'login' ? (
+          <p>
+            ¿No tienes cuenta?{' '}
+            <a href="/register" className="text-blue-600 hover:text-blue-800">
+              Regístrate
+            </a>
+          </p>
+        ) : mode === 'register' ? (
+          <p>
+            ¿Ya tienes cuenta?{' '}
+            <a href="/login" className="text-blue-600 hover:text-blue-800">
+              Inicia sesión
+            </a>
+          </p>
+        ) : (
+          <p>
+            <a href="/login" className="text-blue-600 hover:text-blue-800">
+              Volver al inicio de sesión
+            </a>
+          </p>
+        )}
+      </div>
     </form>
   )
 }
