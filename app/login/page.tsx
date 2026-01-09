@@ -7,7 +7,7 @@ export default function LoginPage() {
         <div>
           <h2 className="text-3xl font-bold text-center">Iniciar Sesión</h2>
           <p className="mt-2 text-center text-gray-600">
-            Acceso restringido al personal autorizado
+            Accede a tu cuenta
           </p>
         </div>
         <AuthForm mode="login" />
