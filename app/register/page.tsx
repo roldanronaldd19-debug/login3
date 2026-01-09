@@ -11,7 +11,6 @@ export default function RegisterPage() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
-  const [token, setToken] = useState<string>('')
   const [invitationValid, setInvitationValid] = useState<boolean | null>(null)
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -20,15 +19,17 @@ export default function RegisterPage() {
     // Verificar si hay un token en la URL (de la invitación)
     const hash = window.location.hash
     const urlToken = searchParams.get('token')
+    const type = searchParams.get('type')
     
+    console.log('Hash:', hash)
+    console.log('URL params:', { token: urlToken, type })
+    
+    // Para invitaciones de Supabase, el token viene en el hash
     if (hash) {
-      // Extraer token del hash (#access_token=...)
-      const tokenMatch = hash.match(/access_token=([^&]+)/)
-      if (tokenMatch) {
-        setToken(tokenMatch[1])
-        verifyInvitation(tokenMatch[1])
-      }
-    } else if (urlToken) {
+      // Procesar el hash de Supabase
+      processHash(hash)
+    } else if (urlToken && type === 'invite') {
+      // Token en query params
       setToken(urlToken)
       verifyInvitation(urlToken)
     } else {
@@ -40,12 +41,27 @@ export default function RegisterPage() {
     }
   }, [searchParams])
 
+  const processHash = (hash: string) => {
+    // Extraer parámetros del hash (#access_token=...&refresh_token=...)
+    const params = new URLSearchParams(hash.replace('#', ''))
+    const accessToken = params.get('access_token')
+    const type = params.get('type')
+    
+    if (accessToken && type === 'invite') {
+      setToken(accessToken)
+      verifyInvitation(accessToken)
+    } else {
+      setInvitationValid(false)
+    }
+  }
+
   const verifyInvitation = async (invitationToken: string) => {
     try {
       // Verificar el token con Supabase
       const { data, error } = await supabase.auth.getUser(invitationToken)
       
       if (error || !data.user) {
+        console.error('Error verificando token:', error)
         setInvitationValid(false)
         setMessage({
           type: 'error',
@@ -62,6 +78,20 @@ export default function RegisterPage() {
       console.error('Error verificando invitación:', error)
       setInvitationValid(false)
     }
+  }
+
+  const setToken = (token: string) => {
+    // Guardar token en localStorage temporalmente
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('invitation_token', token)
+    }
+  }
+
+  const getToken = () => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('invitation_token')
+    }
+    return null
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -92,69 +122,67 @@ export default function RegisterPage() {
     }
 
     try {
-      // 1. Si hay token, actualizar la contraseña del usuario existente
+      const token = getToken()
+      
       if (token) {
-        const { error } = await supabase.auth.updateUser({
+        // 1. Establecer la sesión con el token de invitación
+        const { error: sessionError } = await supabase.auth.setSession({
+          access_token: token,
+          refresh_token: '' // Refresh token no disponible en invitaciones
+        })
+
+        if (sessionError) {
+          console.warn('Error estableciendo sesión:', sessionError)
+          // Continuar de todos modos
+        }
+
+        // 2. Actualizar la contraseña del usuario
+        const { error: updateError } = await supabase.auth.updateUser({
           password: password
         })
 
-        if (error) throw error
-
-        // 2. Actualizar el email confirmado
-        const { error: confirmError } = await supabase.auth.updateUser({
-          email_confirm: true
-        })
-
-        if (confirmError) console.warn('Warning confirming email:', confirmError)
+        if (updateError) {
+          // Si falla por sesión, intentar de otra manera
+          console.error('Error actualizando contraseña:', updateError)
+          throw new Error('No se pudo establecer la contraseña. Intenta recargar la página.')
+        }
 
         setMessage({ 
           type: 'success', 
           text: '✅ Contraseña establecida exitosamente. Redirigiendo...' 
         })
 
-        // 3. Iniciar sesión automáticamente
-        const { error: signInError } = await supabase.auth.signInWithPassword({
-          email,
-          password
-        })
+        // 3. Iniciar sesión con la nueva contraseña
+        setTimeout(async () => {
+          try {
+            const { error: signInError } = await supabase.auth.signInWithPassword({
+              email,
+              password
+            })
 
-        if (signInError) {
-          // Si no puede iniciar sesión, redirigir al login
-          setTimeout(() => {
-            router.push('/login')
-          }, 2000)
-        } else {
-          // Si inicia sesión exitosamente, redirigir al dashboard
-          setTimeout(() => {
-            router.push('/dashboard')
-          }, 2000)
-        }
-      } else {
-        // Flujo normal de registro (no debería ocurrir aquí)
-        const { error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            emailRedirectTo: 'https://login3-three.vercel.app/auth/callback'
+            if (signInError) {
+              console.warn('Error iniciando sesión:', signInError)
+              router.push('/login?message=registration_success')
+            } else {
+              router.push('/dashboard')
+            }
+          } catch (signInErr) {
+            router.push('/login?message=registration_success')
           }
-        })
+        }, 2000)
 
-        if (error) throw error
-
+      } else {
+        // No hay token - flujo de registro normal
         setMessage({ 
-          type: 'success', 
-          text: '✅ Registro completado. Por favor verifica tu email.' 
+          type: 'error', 
+          text: 'Token de invitación no encontrado. Recarga la página o contacta al administrador.' 
         })
-        
-        setTimeout(() => {
-          router.push('/login')
-        }, 3000)
       }
     } catch (error: any) {
       console.error('Error en registro:', error)
       setMessage({ 
         type: 'error', 
-        text: `❌ ${error.message}` 
+        text: `❌ ${error.message || 'Error al completar el registro'}` 
       })
     } finally {
       setLoading(false)
@@ -192,7 +220,7 @@ export default function RegisterPage() {
           <div className="text-center">
             <Link
               href="/login"
-              className="text-blue-600 hover:text-blue-800 font-medium"
+              className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
             >
               ← Volver al inicio de sesión
             </Link>
@@ -215,84 +243,111 @@ export default function RegisterPage() {
           <p className="mt-2 text-center text-gray-600">
             Crea tu contraseña para acceder al sistema
           </p>
-          <div className="mt-4 p-3 bg-blue-50 rounded text-sm text-blue-800">
-            <p className="font-medium">Email: {email}</p>
+          <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+            <p className="font-medium text-blue-800">Email registrado:</p>
+            <p className="text-lg font-semibold text-blue-900 mt-1">{email}</p>
           </div>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
           {message && (
-            <div className={`p-3 rounded ${message.type === 'success' ? 'bg-green-100 text-green-800 border border-green-200' : 'bg-red-100 text-red-800 border border-red-200'}`}>
+            <div className={`p-4 rounded-lg ${message.type === 'success' ? 'bg-green-50 text-green-800 border border-green-200' : 'bg-red-50 text-red-800 border border-red-200'}`}>
               <div className="flex items-start">
-                <span className="mr-2 text-lg">
+                <span className="mr-2 text-xl mt-0.5">
                   {message.type === 'success' ? '✅' : '❌'}
                 </span>
-                <span>{message.text}</span>
+                <span className="font-medium">{message.text}</span>
               </div>
             </div>
           )}
 
-          <div>
-            <label className="block text-sm font-medium mb-2">
-              Contraseña
-              <span className="text-red-500 ml-1">*</span>
-            </label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              placeholder="••••••••"
-              required
-              minLength={8}
-            />
-            <div className="mt-2 text-xs text-gray-500">
-              <p>Requisitos de seguridad:</p>
-              <ul className="list-disc list-inside ml-2 mt-1">
-                <li className={password.length >= 8 ? 'text-green-600' : ''}>Mínimo 8 caracteres</li>
-                <li className={/[a-z]/.test(password) ? 'text-green-600' : ''}>Al menos una minúscula</li>
-                <li className={/[A-Z]/.test(password) ? 'text-green-600' : ''}>Al menos una mayúscula</li>
-                <li className={/\d/.test(password) ? 'text-green-600' : ''}>Al menos un número</li>
-              </ul>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium mb-2 text-gray-700">
+                Contraseña
+                <span className="text-red-500 ml-1">*</span>
+              </label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
+                placeholder="••••••••"
+                required
+                minLength={8}
+              />
+              <div className="mt-3 p-3 bg-gray-50 rounded-lg">
+                <p className="text-sm font-medium text-gray-700 mb-2">Requisitos de seguridad:</p>
+                <div className="space-y-1">
+                  <div className={`flex items-center ${password.length >= 8 ? 'text-green-600' : 'text-gray-500'}`}>
+                    <span className="mr-2">{password.length >= 8 ? '✓' : '○'}</span>
+                    <span className="text-sm">Mínimo 8 caracteres</span>
+                  </div>
+                  <div className={`flex items-center ${/[a-z]/.test(password) ? 'text-green-600' : 'text-gray-500'}`}>
+                    <span className="mr-2">{/[a-z]/.test(password) ? '✓' : '○'}</span>
+                    <span className="text-sm">Al menos una minúscula</span>
+                  </div>
+                  <div className={`flex items-center ${/[A-Z]/.test(password) ? 'text-green-600' : 'text-gray-500'}`}>
+                    <span className="mr-2">{/[A-Z]/.test(password) ? '✓' : '○'}</span>
+                    <span className="text-sm">Al menos una mayúscula</span>
+                  </div>
+                  <div className={`flex items-center ${/\d/.test(password) ? 'text-green-600' : 'text-gray-500'}`}>
+                    <span className="mr-2">{/\d/.test(password) ? '✓' : '○'}</span>
+                    <span className="text-sm">Al menos un número</span>
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
 
-          <div>
-            <label className="block text-sm font-medium mb-2">
-              Confirmar Contraseña
-              <span className="text-red-500 ml-1">*</span>
-            </label>
-            <input
-              type="password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              placeholder="••••••••"
-              required
-              minLength={8}
-            />
-            {password && confirmPassword && password !== confirmPassword && (
-              <p className="mt-1 text-sm text-red-600">Las contraseñas no coinciden</p>
-            )}
+            <div>
+              <label className="block text-sm font-medium mb-2 text-gray-700">
+                Confirmar Contraseña
+                <span className="text-red-500 ml-1">*</span>
+              </label>
+              <input
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
+                placeholder="••••••••"
+                required
+                minLength={8}
+              />
+              {password && confirmPassword && password !== confirmPassword && (
+                <p className="mt-2 text-sm text-red-600 flex items-center">
+                  <span className="mr-1">❌</span> Las contraseñas no coinciden
+                </p>
+              )}
+            </div>
           </div>
 
           <button
             type="submit"
-            disabled={loading}
-            className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            disabled={loading || !password || !confirmPassword || password !== confirmPassword}
+            className="w-full py-3 px-4 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-md hover:shadow-lg"
           >
             {loading ? (
               <div className="flex items-center justify-center">
-                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
-                Procesando...
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-3"></div>
+                Estableciendo contraseña...
               </div>
             ) : (
-              '✅ Completar Registro'
+              <div className="flex items-center justify-center">
+                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+                Completar Registro y Acceder
+              </div>
             )}
           </button>
 
-          <div className="text-center text-sm text-gray-600">
-            <p>Al completar el registro, aceptas los términos y condiciones del sistema.</p>
+          <div className="text-center pt-4 border-t border-gray-200">
+            <p className="text-sm text-gray-600">
+              ¿Problemas con el registro?{' '}
+              <a href="mailto:soporte@tudominio.com" className="text-blue-600 hover:text-blue-800 font-medium">
+                Contactar soporte
+              </a>
+            </p>
           </div>
         </form>
       </div>
