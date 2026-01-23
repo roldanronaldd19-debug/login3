@@ -18,7 +18,7 @@ import {
 } from "recharts"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { Download } from "lucide-react"
+import { Download, Image, FileText } from "lucide-react"
 
 interface GraficosProps {
   datos: { name: string; value: number; porcentaje: number }[]
@@ -50,17 +50,60 @@ const calculateYAxisWidth = (datos: any[]) => {
   return Math.max(50, maxDigits * 8 + 20)
 }
 
+// Declaración global para html2canvas
+declare global {
+  interface Window {
+    html2canvas: any;
+  }
+}
+
 export function CaracterizacionGraficos({ datos }: GraficosProps) {
   const [tipoGrafico, setTipoGrafico] = useState<"barras" | "torta" | "lineal">("barras")
   const [isDownloading, setIsDownloading] = useState(false)
+  const chartContainerRef = useRef<HTMLDivElement>(null)
 
   const yAxisWidth = calculateYAxisWidth(datos)
   const barChartMargin = { top: 30, right: 30, left: yAxisWidth, bottom: 100 }
   const lineChartMargin = { top: 30, right: 30, left: yAxisWidth + 80, bottom: 100 }
 
+  // Función para descargar el gráfico como imagen PNG
+  const handleDownloadImage = async () => {
+    if (!chartContainerRef.current || isDownloading) return
+    
+    setIsDownloading(true)
+    try {
+      // Importar html2canvas dinámicamente para evitar problemas de SSR
+      const html2canvas = (await import('html2canvas')).default
+      
+      // Encontrar el contenedor específico del gráfico actual
+      const chartElement = chartContainerRef.current.querySelector('.chart-content')
+      
+      if (chartElement) {
+        const canvas = await html2canvas(chartElement as HTMLElement, {
+          backgroundColor: "#ffffff",
+          scale: 2,
+          useCORS: true,
+          logging: false,
+        })
+        
+        const image = canvas.toDataURL("image/png", 1.0)
+        const link = document.createElement("a")
+        link.href = image
+        link.download = `grafico_${tipoGrafico}_${new Date().toISOString().slice(0, 10)}.png`
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+      }
+    } catch (error) {
+      console.error("Error al descargar el gráfico:", error)
+      alert("Error al descargar la imagen. Intenta de nuevo.")
+    } finally {
+      setIsDownloading(false)
+    }
+  }
+
   // Función para descargar los datos como CSV
   const handleDownloadCSV = () => {
-    setIsDownloading(true)
     try {
       // Crear contenido CSV
       const headers = ["Categoría", "Peso (kg)", "Porcentaje (%)"]
@@ -87,8 +130,6 @@ export function CaracterizacionGraficos({ datos }: GraficosProps) {
       document.body.removeChild(link)
     } catch (error) {
       console.error("Error al descargar CSV:", error)
-    } finally {
-      setIsDownloading(false)
     }
   }
 
@@ -107,7 +148,7 @@ export function CaracterizacionGraficos({ datos }: GraficosProps) {
   }
 
   return (
-    <Card className="p-6 border border-border">
+    <Card className="p-6 border border-border" ref={chartContainerRef}>
       <div className="flex justify-between items-center mb-8">
         <h3 className="text-2xl font-bold text-foreground">Distribución de Desechos por Categoría</h3>
         <div className="flex gap-2">
@@ -121,13 +162,22 @@ export function CaracterizacionGraficos({ datos }: GraficosProps) {
           </Button>
           <Button
             onClick={handleDownloadCSV}
-            disabled={isDownloading}
             variant="outline"
             size="sm"
             className="flex items-center gap-2"
           >
-            <Download className="h-4 w-4" />
-            {isDownloading ? "Descargando..." : "Descargar CSV"}
+            <FileText className="h-4 w-4" />
+            CSV
+          </Button>
+          <Button
+            onClick={handleDownloadImage}
+            disabled={isDownloading}
+            variant="default"
+            size="sm"
+            className="flex items-center gap-2 bg-primary"
+          >
+            <Image className="h-4 w-4" />
+            {isDownloading ? "Descargando..." : "Descargar Gráfico"}
           </Button>
         </div>
       </div>
@@ -161,7 +211,8 @@ export function CaracterizacionGraficos({ datos }: GraficosProps) {
         </div>
       </div>
 
-      <div className="w-full">
+      {/* Contenedor del gráfico para captura */}
+      <div className="chart-content">
         {tipoGrafico === "barras" && (
           <div style={{ width: "100%", height: "500px" }}>
             <ResponsiveContainer width="100%" height="100%">
