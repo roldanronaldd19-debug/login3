@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useRef } from "react"
 import {
   BarChart,
   Bar,
@@ -18,6 +18,8 @@ import {
 } from "recharts"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import { Download } from "lucide-react"
+import html2canvas from "html2canvas"
 
 interface GraficosProps {
   datos: { name: string; value: number; porcentaje: number }[]
@@ -51,15 +53,58 @@ const calculateYAxisWidth = (datos: any[]) => {
 
 export function CaracterizacionGraficos({ datos }: GraficosProps) {
   const [tipoGrafico, setTipoGrafico] = useState<"barras" | "torta" | "lineal">("barras")
+  const [isDownloading, setIsDownloading] = useState(false)
+  const chartRef = useRef<HTMLDivElement>(null)
 
   const yAxisWidth = calculateYAxisWidth(datos)
   const barChartMargin = { top: 30, right: 30, left: yAxisWidth, bottom: 100 }
   const lineChartMargin = { top: 30, right: 30, left: yAxisWidth + 80, bottom: 100 }
 
+  // Función para descargar el gráfico como imagen
+  const handleDownload = async () => {
+    if (!chartRef.current || isDownloading) return
+    
+    setIsDownloading(true)
+    try {
+      // Esperar un momento para que el gráfico se renderice completamente
+      await new Promise(resolve => setTimeout(resolve, 100))
+      
+      const canvas = await html2canvas(chartRef.current, {
+        backgroundColor: "#ffffff",
+        scale: 2, // Mejor calidad
+        useCORS: true,
+        logging: false,
+      })
+      
+      const image = canvas.toDataURL("image/png", 1.0)
+      const link = document.createElement("a")
+      link.href = image
+      link.download = `grafico_${tipoGrafico}_${new Date().toISOString().slice(0, 10)}.png`
+      link.click()
+    } catch (error) {
+      console.error("Error al descargar el gráfico:", error)
+    } finally {
+      setIsDownloading(false)
+    }
+  }
+
   return (
     <Card className="p-6 border border-border">
-      <div className="mb-8">
-        <h3 className="text-2xl font-bold text-foreground mb-6">Distribución de Desechos por Categoría</h3>
+      <div className="flex justify-between items-center mb-8">
+        <h3 className="text-2xl font-bold text-foreground">Distribución de Desechos por Categoría</h3>
+        <Button
+          onClick={handleDownload}
+          disabled={isDownloading}
+          variant="outline"
+          size="sm"
+          className="flex items-center gap-2"
+        >
+          <Download className="h-4 w-4" />
+          {isDownloading ? "Descargando..." : "Descargar gráfico"}
+        </Button>
+      </div>
+
+      <div className="mb-6">
         <div className="flex gap-3 flex-wrap">
           <Button
             onClick={() => setTipoGrafico("barras")}
@@ -88,7 +133,7 @@ export function CaracterizacionGraficos({ datos }: GraficosProps) {
         </div>
       </div>
 
-      <div className="w-full">
+      <div className="w-full" ref={chartRef}>
         {tipoGrafico === "barras" && (
           <div style={{ width: "100%", height: "500px" }}>
             <ResponsiveContainer width="100%" height="100%">
