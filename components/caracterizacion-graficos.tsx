@@ -19,7 +19,6 @@ import {
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Download } from "lucide-react"
-import html2canvas from "html2canvas"
 
 interface GraficosProps {
   datos: { name: string; value: number; porcentaje: number }[]
@@ -54,37 +53,56 @@ const calculateYAxisWidth = (datos: any[]) => {
 export function CaracterizacionGraficos({ datos }: GraficosProps) {
   const [tipoGrafico, setTipoGrafico] = useState<"barras" | "torta" | "lineal">("barras")
   const [isDownloading, setIsDownloading] = useState(false)
-  const chartRef = useRef<HTMLDivElement>(null)
 
   const yAxisWidth = calculateYAxisWidth(datos)
   const barChartMargin = { top: 30, right: 30, left: yAxisWidth, bottom: 100 }
   const lineChartMargin = { top: 30, right: 30, left: yAxisWidth + 80, bottom: 100 }
 
-  // Función para descargar el gráfico como imagen
-  const handleDownload = async () => {
-    if (!chartRef.current || isDownloading) return
-    
+  // Función para descargar los datos como CSV
+  const handleDownloadCSV = () => {
     setIsDownloading(true)
     try {
-      // Esperar un momento para que el gráfico se renderice completamente
-      await new Promise(resolve => setTimeout(resolve, 100))
+      // Crear contenido CSV
+      const headers = ["Categoría", "Peso (kg)", "Porcentaje (%)"]
+      const rows = datos.map(d => [
+        `"${d.name}"`,
+        d.value.toFixed(2),
+        d.porcentaje.toFixed(2)
+      ])
       
-      const canvas = await html2canvas(chartRef.current, {
-        backgroundColor: "#ffffff",
-        scale: 2, // Mejor calidad
-        useCORS: true,
-        logging: false,
-      })
+      const csvContent = [
+        headers.join(","),
+        ...rows.map(row => row.join(","))
+      ].join("\n")
       
-      const image = canvas.toDataURL("image/png", 1.0)
+      // Crear y descargar archivo
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
       const link = document.createElement("a")
-      link.href = image
-      link.download = `grafico_${tipoGrafico}_${new Date().toISOString().slice(0, 10)}.png`
+      const url = URL.createObjectURL(blob)
+      link.setAttribute("href", url)
+      link.setAttribute("download", `datos_desechos_${new Date().toISOString().slice(0, 10)}.csv`)
+      link.style.visibility = "hidden"
+      document.body.appendChild(link)
       link.click()
+      document.body.removeChild(link)
     } catch (error) {
-      console.error("Error al descargar el gráfico:", error)
+      console.error("Error al descargar CSV:", error)
     } finally {
       setIsDownloading(false)
+    }
+  }
+
+  // Función para copiar los datos al portapapeles
+  const handleCopyToClipboard = async () => {
+    try {
+      const text = datos.map(d => 
+        `${d.name}: ${d.value.toFixed(2)} kg (${d.porcentaje.toFixed(2)}%)`
+      ).join("\n")
+      
+      await navigator.clipboard.writeText(text)
+      alert("Datos copiados al portapapeles")
+    } catch (error) {
+      console.error("Error al copiar:", error)
     }
   }
 
@@ -92,16 +110,26 @@ export function CaracterizacionGraficos({ datos }: GraficosProps) {
     <Card className="p-6 border border-border">
       <div className="flex justify-between items-center mb-8">
         <h3 className="text-2xl font-bold text-foreground">Distribución de Desechos por Categoría</h3>
-        <Button
-          onClick={handleDownload}
-          disabled={isDownloading}
-          variant="outline"
-          size="sm"
-          className="flex items-center gap-2"
-        >
-          <Download className="h-4 w-4" />
-          {isDownloading ? "Descargando..." : "Descargar gráfico"}
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            onClick={handleCopyToClipboard}
+            variant="outline"
+            size="sm"
+            className="flex items-center gap-2"
+          >
+            Copiar datos
+          </Button>
+          <Button
+            onClick={handleDownloadCSV}
+            disabled={isDownloading}
+            variant="outline"
+            size="sm"
+            className="flex items-center gap-2"
+          >
+            <Download className="h-4 w-4" />
+            {isDownloading ? "Descargando..." : "Descargar CSV"}
+          </Button>
+        </div>
       </div>
 
       <div className="mb-6">
@@ -133,7 +161,7 @@ export function CaracterizacionGraficos({ datos }: GraficosProps) {
         </div>
       </div>
 
-      <div className="w-full" ref={chartRef}>
+      <div className="w-full">
         {tipoGrafico === "barras" && (
           <div style={{ width: "100%", height: "500px" }}>
             <ResponsiveContainer width="100%" height="100%">
@@ -280,6 +308,31 @@ export function CaracterizacionGraficos({ datos }: GraficosProps) {
             </ResponsiveContainer>
           </div>
         )}
+      </div>
+
+      {/* Tabla de datos para referencia */}
+      <div className="mt-8">
+        <h4 className="text-lg font-semibold mb-4">Datos en tabla</h4>
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse border border-gray-200">
+            <thead>
+              <tr className="bg-gray-50">
+                <th className="border border-gray-200 px-4 py-2 text-left">Categoría</th>
+                <th className="border border-gray-200 px-4 py-2 text-left">Peso (kg)</th>
+                <th className="border border-gray-200 px-4 py-2 text-left">Porcentaje (%)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {datos.map((item, index) => (
+                <tr key={index} className={index % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+                  <td className="border border-gray-200 px-4 py-2">{item.name}</td>
+                  <td className="border border-gray-200 px-4 py-2">{item.value.toFixed(2)}</td>
+                  <td className="border border-gray-200 px-4 py-2">{item.porcentaje.toFixed(2)}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </Card>
   )
