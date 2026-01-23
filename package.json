@@ -65,7 +65,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.1.9",
-    "@types/html2canvas": "^1.0.5",
+    "@types/html2canvas": "^1.0.0",
     "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",
